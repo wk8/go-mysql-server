@@ -6051,7 +6051,7 @@ func TestTypesOverWire(t *testing.T, harness ClientHarness, sessionBuilder serve
 			defer engine.Close()
 
 			ctx := NewContextWithClient(harness, sql.Client{
-				User:    "roottt",
+				User:    "rootttt",
 				Address: "localhost",
 			})
 
