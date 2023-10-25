@@ -679,10 +679,7 @@ func TestDropForeignKeys(t *testing.T) {
 }
 
 func TestForeignKeys(t *testing.T) {
-	harness := enginetest.NewDefaultMemoryHarness()
-	// TOD
-	harness.QueriesToSkip("UPDATE over_limit SET pk = 2 WHERE pk = 1;")
-	enginetest.TestForeignKeys(t, harness)
+	enginetest.TestForeignKeys(t, enginetest.NewDefaultMemoryHarness())
 }
 
 func TestFulltextIndexes(t *testing.T) {
