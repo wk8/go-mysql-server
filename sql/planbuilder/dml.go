@@ -92,7 +92,7 @@ func (b *Builder) buildInsert(inScope *scope, i *ast.Insert) (outScope *scope) {
 			combinedScope.newColumn(srcScope.cols[i])
 		} else {
 			// check for VALUES refs
-			c.table = OnDupValuesPrefix
+			c.tableId.TableName = OnDupValuesPrefix
 			combinedScope.newColumn(c)
 		}
 	}
@@ -251,8 +251,8 @@ func (b *Builder) assignmentExprsToExpressions(inScope *scope, e ast.AssignmentE
 			}
 		}
 	}
-	
-	// We need additional update expressions for any generated columns, since they won't be part of the update 
+
+	// We need additional update expressions for any generated columns, since they won't be part of the update
 	// expressions, but their value in the row must be updated before being passed to the integrator for storage.
 	for i, col := range tableSch {
 		if col.Generated != nil {
@@ -261,7 +261,7 @@ func (b *Builder) assignmentExprsToExpressions(inScope *scope, e ast.AssignmentE
 			updateExprs = append(updateExprs, expression.NewSetField(colName, assignColumnIndexes(generated, tableSch)))
 		}
 	}
-	
+
 	return updateExprs
 }
 
@@ -428,8 +428,7 @@ func (b *Builder) buildUpdate(inScope *scope, u *ast.Update) (outScope *scope) {
 					tableScope := inScope.push()
 					for _, c := range rt.Schema() {
 						tableScope.addColumn(scopeColumn{
-							db:       rt.SqlDatabase.Name(),
-							table:    strings.ToLower(n.Name()),
+							tableId:  sql.NewTableID(rt.SqlDatabase.Name(), n.Name()),
 							col:      strings.ToLower(c.Name),
 							typ:      c.Type,
 							nullable: c.Nullable,

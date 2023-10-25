@@ -23,12 +23,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dolthub/go-mysql-server/sql/fulltext"
 	"github.com/dolthub/vitess/go/mysql"
 	"github.com/sirupsen/logrus"
 
 	"github.com/dolthub/go-mysql-server/internal/similartext"
 	"github.com/dolthub/go-mysql-server/sql"
+	"github.com/dolthub/go-mysql-server/sql/fulltext"
 	"github.com/dolthub/go-mysql-server/sql/mysql_db"
 	"github.com/dolthub/go-mysql-server/sql/plan"
 	"github.com/dolthub/go-mysql-server/sql/types"
@@ -179,7 +179,6 @@ func (b *BaseBuilder) buildCreateView(ctx *sql.Context, n *plan.CreateView, row 
 
 	// TODO: isUpdatable should be defined at CREATE VIEW time
 	// isUpdatable := GetIsUpdatableFromCreateView(cv)
-
 	creator, ok := n.Database().(sql.ViewDatabase)
 	if ok {
 		return sql.RowsToRowIter(), creator.CreateView(ctx, n.Name, n.Definition.TextDefinition, n.CreateViewString)

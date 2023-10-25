@@ -634,7 +634,7 @@ func modifyColumnInSchema(schema sql.Schema, name string, column *sql.Column, or
 				if newSchemaIdx == -1 {
 					return nil, transform.SameTree, sql.ErrColumnNotFound.New(colName)
 				}
-				return expression.NewGetFieldWithTable(newSchemaIdx, gf.Type(), gf.Table(), colName, gf.IsNullable()), transform.NewTree, nil
+				return expression.NewGetFieldWithTable(newSchemaIdx, gf.Type(), gf.Database(), gf.Table(), colName, gf.IsNullable()), transform.NewTree, nil
 			})
 			if err != nil {
 				return nil, nil, err
@@ -972,6 +972,7 @@ func GetColumnsAndPrepareExpressions(
 			return expression.NewGetFieldWithTable(
 				idx,
 				gf.Type(),
+				gf.Database(),
 				gf.Table(),
 				gf.Name(),
 				gf.IsNullable(),
@@ -1468,7 +1469,7 @@ func addColumnToSchema(schema sql.Schema, column *sql.Column, order *sql.ColumnO
 						if idx < 0 {
 							return nil, transform.SameTree, sql.ErrTableColumnNotFound.New(schema[0].Source, s.Name())
 						}
-						return expression.NewGetFieldWithTable(idx, s.Type(), s.Table(), s.Name(), s.IsNullable()), transform.NewTree, nil
+						return expression.NewGetFieldWithTable(idx, s.Type(), s.Database(), s.Table(), s.Name(), s.IsNullable()), transform.NewTree, nil
 					default:
 						return s, transform.SameTree, nil
 					}
@@ -1866,7 +1867,7 @@ func (b *BaseBuilder) executeAlterIndex(ctx *sql.Context, n *plan.AlterIndex) er
 				}
 			}
 		}
-		
+
 		indexDef := sql.IndexDef{
 			Name:       indexName,
 			Columns:    n.Columns,
@@ -1874,7 +1875,7 @@ func (b *BaseBuilder) executeAlterIndex(ctx *sql.Context, n *plan.AlterIndex) er
 			Storage:    n.Using,
 			Comment:    n.Comment,
 		}
-		
+
 		if n.Constraint == sql.IndexConstraint_Fulltext {
 			database, ok := n.Database().(fulltext.Database)
 			if !ok {
@@ -1888,12 +1889,12 @@ func (b *BaseBuilder) executeAlterIndex(ctx *sql.Context, n *plan.AlterIndex) er
 			}
 			return fulltext.CreateFulltextIndexes(ctx, database, indexable, nil, indexDef)
 		}
-		
+
 		err = indexable.CreateIndex(ctx, indexDef)
 		if err != nil {
 			return err
 		}
-		
+
 		shouldBuild := false
 		ibt, isIndexBuilding := indexable.(sql.IndexBuildingTable)
 		if isIndexBuilding {
@@ -2103,7 +2104,6 @@ func rewriteTableForIndexCreate(ctx *sql.Context, n *plan.AlterIndex, table sql.
 	}
 	return nil
 }
-
 
 func indexCreateRequiresBuild(n *plan.AlterIndex) bool {
 	return n.Constraint == sql.IndexConstraint_Unique || indexOnVirtualColumn(n.Columns, n.TargetSchema())
