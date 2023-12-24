@@ -17,6 +17,7 @@ package types
 import (
 	"database/sql/driver"
 	"fmt"
+	"math/big"
 	"regexp"
 	"sort"
 	"strconv"
@@ -336,7 +337,7 @@ func containsJSONNumber(a float64, b interface{}) (bool, error) {
 //   - NULL
 //     For comparison of any JSON value to SQL NULL, the result is UNKNOWN.
 //
-//     TODO(andy): BLOB, BIT, OPAQUE, DATETIME, TIME, DATE, INTEGER
+//     TODO(andy): BLOB, BIT, OPAQUE, DATETIME, TIME, DATE
 //
 // https://dev.mysql.com/doc/refman/8.0/en/json.html#json-comparison
 func CompareJSON(a, b interface{}) (int, error) {
@@ -353,6 +354,8 @@ func CompareJSON(a, b interface{}) (int, error) {
 		return compareJSONObject(a, b)
 	case string:
 		return compareJSONString(a, b)
+	case int64:
+		return compareJSONInteger(a, b)
 	case float64:
 		return compareJSONNumber(a, b)
 	case sql.JSONWrapper:
@@ -473,6 +476,35 @@ func compareJSONString(a string, b interface{}) (int, error) {
 	}
 }
 
+// JSON only has a number type, but JSON documents can store both int64 and float64. These types are comparable.
+func compareJSONInteger(a int64, b interface{}) (int, error) {
+	switch b := b.(type) {
+	case
+		bool,
+		[]interface{},
+		map[string]interface{},
+		string:
+		// a is lower precedence
+		return -1, nil
+
+	case int64:
+		if a > b {
+			return 1, nil
+		}
+		if a < b {
+			return -1, nil
+		}
+		return 0, nil
+
+	case float64:
+		return compareIntAndFloat(a, b), nil
+
+	default:
+		// a is higher precedence
+		return 1, nil
+	}
+}
+
 func compareJSONNumber(a float64, b interface{}) (int, error) {
 	switch b := b.(type) {
 	case
@@ -492,10 +524,19 @@ func compareJSONNumber(a float64, b interface{}) (int, error) {
 		}
 		return 0, nil
 
+	case int64:
+		return compareIntAndFloat(b, a), nil
+
 	default:
 		// a is higher precedence
 		return 1, nil
 	}
+}
+
+func compareIntAndFloat(a int64, b float64) int {
+	newA := big.NewFloat(0).SetInt64(a)
+	newB := big.NewFloat(b)
+	return newA.Cmp(newB)
 }
 
 func jsonObjectKeyIntersection(a, b map[string]interface{}) (ks []string) {
