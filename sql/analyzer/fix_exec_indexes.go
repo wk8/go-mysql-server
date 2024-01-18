@@ -67,6 +67,7 @@ type idxScope struct {
 	lateralScopes []*idxScope
 	childScopes   []*idxScope
 	columns       []string
+	ids           []sql.ColumnId
 	children      []sql.Node
 	expressions   []sql.Expression
 	checks        sql.CheckConstraints
@@ -86,6 +87,7 @@ func (s *idxScope) addSchema(sch sql.Schema) {
 
 func (s *idxScope) addScope(other *idxScope) {
 	s.columns = append(s.columns, other.columns...)
+	s.ids = append(s.ids, other.ids...)
 }
 
 func (s *idxScope) addLateral(other *idxScope) {
@@ -106,6 +108,15 @@ func unqualify(s string) string {
 		return strings.Split(s, ".")[1]
 	}
 	return s
+}
+
+func (s *idxScope) getIdxId(id sql.ColumnId, name string) (int, bool) {
+	for i, c := range s.ids {
+		if c == id {
+			return i, true
+		}
+	}
+	return s.getIdx(name)
 }
 
 func (s *idxScope) getIdx(n string) (int, bool) {
@@ -168,10 +179,16 @@ func (s *idxScope) copy() *idxScope {
 		varsCopy = make([]string, len(s.columns))
 		copy(varsCopy, s.columns)
 	}
+	var idsCopy []sql.ColumnId
+	if len(s.ids) > 0 {
+		idsCopy = make([]sql.ColumnId, len(s.ids))
+		copy(idsCopy, s.ids)
+	}
 	return &idxScope{
 		lateralScopes: lateralCopy,
 		parentScopes:  parentCopy,
 		columns:       varsCopy,
+		ids:           idsCopy,
 	}
 }
 
@@ -417,6 +434,21 @@ func (s *idxScope) finalizeSelf(n sql.Node) (sql.Node, error) {
 		return nn.WithChecks(s.checks), nil
 	default:
 		// child scopes don't account for projections
+		switch nn := n.(type) {
+		case *plan.Project:
+			for _, expr := range nn.Projections {
+				if a, ok := expr.(*expression.Alias); ok {
+					s.ids = append(s.ids, a.Id())
+				}
+			}
+		case plan.TableIdNode:
+			cols := nn.Columns()
+			cols.ForEach(func(col sql.ColumnId) {
+				s.ids = append(s.ids, col)
+			})
+		default:
+			// TODO: aggregations don't have expression ids
+		}
 		s.addSchema(n.Schema())
 		var err error
 		if s.children != nil {
@@ -460,6 +492,7 @@ func fixExprToScope(e sql.Expression, scopes ...*idxScope) sql.Expression {
 	newScope := &idxScope{}
 	for _, s := range scopes {
 		newScope.addScope(s)
+		// TODO: flip the scopes instead
 		if s.isGroupBy {
 			newScope.isGroupBy = true
 		}
@@ -474,10 +507,8 @@ func fixExprToScope(e sql.Expression, scopes ...*idxScope) sql.Expression {
 			//  queries where the columns being selected are only found in subqueries. Conversely, we actually want to ignore
 			//  this error for the case of DEFAULT in a `plan.Values`, since we analyze the insert source in isolation (we
 			//  don't have the destination schema, and column references in default values are determined in the build phase)
-			if e.String() == "col2" {
-				print()
-			}
-			idx, _ := newScope.getIdx(e.String())
+			idx, _ := newScope.getIdxId(e.Id(), e.String())
+			//idx, _ := newScope.getIdx(e.String())
 			if idx >= 0 {
 				return e.WithIndex(idx), transform.NewTree, nil
 			}

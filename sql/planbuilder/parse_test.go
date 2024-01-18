@@ -2121,6 +2121,10 @@ Create table myTable
          ENFORCED
 `,
 		},
+		{
+			Query: "select 0 as col1, 1 as col2, 2 as col2 group by col2 having col2 = 1;",
+			ExpectedPlan: "",
+		},
 	}
 
 	var w *bufio.Writer

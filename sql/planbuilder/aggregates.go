@@ -795,9 +795,7 @@ func (b *Builder) buildHaving(fromScope, projScope, outScope *scope, having *ast
 	}
 	havingScope := fromScope.push()
 	for _, c := range projScope.cols {
-		if c.tableId.IsEmpty() {
-			havingScope.newColumn(c)
-		}
+		havingScope.addColumn(c)
 	}
 	havingScope.groupBy = fromScope.groupBy
 	havingScope.isHaving = true
