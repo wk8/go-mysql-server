@@ -1207,6 +1207,99 @@ END;`,
 		},
 	},
 	{
+		Name: "create DECLARE HANDLERs",
+		SetUpScript: []string{
+			`DROP TABLE IF EXISTS t1;`,
+			`CREATE TABLE t1 (pk BIGINT PRIMARY KEY);`,
+			`CREATE PROCEDURE proc_int()
+BEGIN
+	DECLARE a, b INT DEFAULT 1;
+    DECLARE cur1 CURSOR FOR SELECT * FROM t1;
+    OPEN cur1;
+    BEGIN
+	DECLARE EXIT HANDLER FOR 1329 SET a = 2;
+		tloop: LOOP
+			FETCH cur1 INTO b;
+            IF a > 1 THEN
+				LEAVE tloop;
+            END IF;
+		END LOOP;
+    END;
+    CLOSE cur1;
+    SELECT a;
+END;`,
+			`CREATE PROCEDURE proc_state()
+BEGIN
+	DECLARE a, b INT DEFAULT 1;
+    DECLARE cur1 CURSOR FOR SELECT * FROM t1;
+    OPEN cur1;
+    BEGIN
+	DECLARE EXIT HANDLER FOR SQLSTATE '02000' SET a = 2;
+		tloop: LOOP
+			FETCH cur1 INTO b;
+            IF a > 1 THEN
+				LEAVE tloop;
+            END IF;
+		END LOOP;
+    END;
+    CLOSE cur1;
+    SELECT a;
+END;`,
+			`CREATE PROCEDURE proc_warning()
+BEGIN
+	DECLARE a, b INT DEFAULT 1;
+    DECLARE cur1 CURSOR FOR SELECT * FROM t1;
+    OPEN cur1;
+    BEGIN
+	DECLARE EXIT HANDLER FOR SQLWARNING SET a = 2;
+		tloop: LOOP
+			FETCH cur1 INTO b;
+            IF a > 1 THEN
+				LEAVE tloop;
+            END IF;
+		END LOOP;
+    END;
+    CLOSE cur1;
+    SELECT a;
+END;`,
+			`CREATE PROCEDURE proc_exception()
+BEGIN
+	DECLARE a, b INT DEFAULT 1;
+    DECLARE cur1 CURSOR FOR SELECT * FROM t1;
+    OPEN cur1;
+    BEGIN
+	DECLARE EXIT HANDLER FOR SQLEXCEPTION SET a = 2;
+		tloop: LOOP
+			FETCH cur1 INTO b;
+            IF a > 1 THEN
+				LEAVE tloop;
+            END IF;
+		END LOOP;
+    END;
+    CLOSE cur1;
+    SELECT a;
+END;`,
+		},
+		Assertions: []ScriptTestAssertion{
+			{
+				Query:    "CALL proc_exception();",
+				Expected: []sql.Row{{2}},
+			},
+			{
+				Query:    "CALL proc_warning();",
+				Expected: []sql.Row{{2}},
+			},
+			{
+				Query:    "CALL proc_state();",
+				Expected: []sql.Row{{2}},
+			},
+			{
+				Query:    "CALL proc_int();",
+				Expected: []sql.Row{{2}},
+			},
+		},
+	},
+	{
 		Name: "DECLARE HANDLERs exit according to the block they were declared in",
 		SetUpScript: []string{
 			`DROP TABLE IF EXISTS t1;`,

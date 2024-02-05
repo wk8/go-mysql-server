@@ -31,11 +31,13 @@ const (
 
 // DeclareHandler represents the DECLARE ... HANDLER statement.
 type DeclareHandler struct {
-	Action    DeclareHandlerAction
-	Statement sql.Node
-	Pref      *expression.ProcedureReference
-	//TODO: implement other conditions besides NOT FOUND
+	Action     DeclareHandlerAction
+	Statement  sql.Node
+	Pref       *expression.ProcedureReference
+	Conditions []SqlState
 }
+
+type SqlState string
 
 var _ sql.Node = (*DeclareHandler)(nil)
 var _ sql.CollationCoercible = (*DeclareHandler)(nil)

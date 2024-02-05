@@ -347,11 +347,6 @@ func (b *Builder) buildDeclareCursor(inScope *scope, d *ast.Declare) (outScope *
 func (b *Builder) buildDeclareHandler(inScope *scope, d *ast.Declare, query string) (outScope *scope) {
 	outScope = inScope.push()
 	dHandler := d.Handler
-	//TODO: support other condition values besides NOT FOUND
-	if len(dHandler.ConditionValues) != 1 || dHandler.ConditionValues[0].ValueType != ast.DeclareHandlerCondition_NotFound {
-		err := sql.ErrUnsupportedSyntax.New(ast.String(d))
-		b.handleErr(err)
-	}
 	stmtScope := b.build(inScope, dHandler.Statement, query)
 
 	var action plan.DeclareHandlerAction
@@ -374,6 +369,8 @@ func (b *Builder) buildDeclareHandler(inScope *scope, d *ast.Declare, query stri
 	handler := &plan.DeclareHandler{
 		Action:    action,
 		Statement: stmtScope.node,
+		// todo parse condition sqlStates into a comparable format
+		Conditions: nil,
 	}
 
 	inScope.proc.AddHandler(handler)
