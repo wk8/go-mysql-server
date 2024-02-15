@@ -125,12 +125,24 @@ func (d *Div) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 		return nil, err
 	}
 
+	if result == nil {
+		return nil, nil
+	}
+
 	// Decimals must be rounded
-	if res, ok := result.(decimal.Decimal); ok {
-		if isOutermostArithmeticOp(d, d.ops) {
-			finalScale, _ := getFinalScale(ctx, row, d, 0)
-			return res.Round(finalScale), nil
+	// TODO: this is second time calling d.Type() and isOutermostArithmeticOp()
+	if isOutermostArithmeticOp(d, d.ops) && types.IsDecimal(d.Type()) {
+		var res decimal.Decimal
+		switch r := result.(type) {
+		case float32:
+			res = decimal.NewFromFloat32(r)
+		case float64:
+			res = decimal.NewFromFloat(r)
+		case decimal.Decimal:
+			res = r
 		}
+		finalScale, _ := getFinalScale(ctx, row, d, 0)
+		return res.Round(finalScale), nil
 	}
 
 	return result, nil
@@ -178,6 +190,10 @@ func (d *Div) evalLeftRight(ctx *sql.Context, row sql.Row) (interface{}, interfa
 // should be preserved.
 func (d *Div) convertLeftRight(ctx *sql.Context, left interface{}, right interface{}) (interface{}, interface{}) {
 	typ := d.internalType()
+	if !isOutermostDiv(d, 0, d.divOps) {
+		typ = types.Float64
+	}
+
 	lIsTimeType := types.IsTime(d.LeftChild.Type())
 	rIsTimeType := types.IsTime(d.RightChild.Type())
 
