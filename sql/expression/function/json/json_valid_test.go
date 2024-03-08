@@ -16,7 +16,7 @@ package json
 
 import (
 	"fmt"
-"testing"
+	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gopkg.in/src-d/go-errors.v1"
