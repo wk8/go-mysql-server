@@ -322,7 +322,7 @@ func (b *Builder) buildDeclareVariables(inScope *scope, d *ast.Declare) (outScop
 		names[i] = varName
 		param := expression.NewProcedureParam(varName, typ)
 		inScope.proc.AddVar(param)
-		inScope.newColumn(scopeColumn{col: varName, typ: typ, scalar: param})
+		inScope.newColumn(scopeColumn{col: varName, typ: typ, scalar: param}, true)
 	}
 	defaultVal := b.buildDefaultExpression(inScope, dVars.VarType.Default)
 

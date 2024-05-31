@@ -38,7 +38,7 @@ type scope struct {
 	refsSubquery   bool
 
 	// cols are definitions provided by this scope
-	cols   []scopeColumn
+	cols   *colList
 	colset sql.ColSet
 	// extraCols are auxillary output columns required
 	// for sorting or grouping
@@ -82,23 +82,29 @@ func (s *scope) resolveColumn(db, table, col string, checkParent, chooseFirst bo
 
 	var found scopeColumn
 	var foundCand bool
-	for _, c := range s.cols {
+	s.cols.iterCols(func(_ int, c scopeColumn) bool {
 		if strings.EqualFold(c.col, col) && (strings.EqualFold(c.table, table) || table == "") && (strings.EqualFold(c.db, db) || db == "") {
 			if foundCand {
 				if found.equals(c) {
-					continue
+					return true
 				}
 
 				if !s.b.TriggerCtx().Call && len(s.b.TriggerCtx().UnresolvedTables) > 0 {
 					c, ok := s.triggerCol(table, col)
 					if ok {
-						return c, true
+						found = c
+						foundCand = true
+						return false
 					}
 				}
 				if c.table == OnDupValuesPrefix {
-					return found, true
+					found = c
+					foundCand = true
+					return false
 				} else if found.table == OnDupValuesPrefix {
-					return c, true
+					found = c
+					foundCand = true
+					return false
 				}
 				err := sql.ErrAmbiguousColumnName.New(col, []string{c.table, found.table})
 				if c.table == "" {
@@ -107,12 +113,15 @@ func (s *scope) resolveColumn(db, table, col string, checkParent, chooseFirst bo
 				s.handleErr(err)
 			}
 			if chooseFirst || s.groupBy != nil {
-				return c, true
+				found = c
+				foundCand = true
+				return false
 			}
 			found = c
 			foundCand = true
 		}
-	}
+		return true
+	})
 	if foundCand {
 		return found, true
 	}
@@ -167,14 +176,14 @@ func (s *scope) triggerCol(table, col string) (scopeColumn, bool) {
 	for _, t := range s.b.TriggerCtx().UnresolvedTables {
 		if strings.EqualFold(t, table) {
 			col := scopeColumn{db: dbName, table: table, col: col}
-			id := s.newColumn(col)
+			id := s.newColumn(col, true)
 			col.id = id
 			return col, true
 		}
 	}
 	if table == "" {
 		col := scopeColumn{db: dbName, table: table, col: col}
-		id := s.newColumn(col)
+		id := s.newColumn(col, true)
 		col.id = id
 		return col, true
 	}
@@ -275,19 +284,22 @@ func (s *scope) nearestSubquery() *subquery {
 func (s *scope) setTableAlias(t string) {
 	t = strings.ToLower(t)
 	var oldTable string
-	for i := range s.cols {
-		beforeColStr := s.cols[i].String()
-		if oldTable == "" {
-			oldTable = s.cols[i].table
+	s.cols.iterSegments(func(seg []scopeColumn) bool {
+		for i := range seg {
+			beforeColStr := seg[i].String()
+			if oldTable == "" {
+				oldTable = seg[i].table
+			}
+			seg[i].table = t
+			id, ok := s.getExpr(beforeColStr, true)
+			if ok {
+				// todo better way to do projections
+				delete(s.exprs, beforeColStr)
+			}
+			s.exprs[strings.ToLower(seg[i].String())] = id
 		}
-		s.cols[i].table = t
-		id, ok := s.getExpr(beforeColStr, true)
-		if ok {
-			// todo better way to do projections
-			delete(s.exprs, beforeColStr)
-		}
-		s.exprs[strings.ToLower(s.cols[i].String())] = id
-	}
+		return true
+	})
 	id, ok := s.tables[oldTable]
 	if !ok {
 		return
@@ -302,26 +314,31 @@ func (s *scope) setTableAlias(t string) {
 // setColAlias updates the column name definitions for this scope
 // to the names in the input list.
 func (s *scope) setColAlias(cols []string) {
-	if len(cols) != len(s.cols) {
+	if len(cols) != s.cols.len() {
 		err := sql.ErrColumnCountMismatch.New()
 		s.b.handleErr(err)
 	}
-	ids := make([]columnId, len(cols))
-	for i := range s.cols {
-		beforeColStr := s.cols[i].String()
+	var ids []columnId
+	s.cols.iterCols(func(i int, c scopeColumn) bool {
+		beforeColStr := c.String()
 		id, ok := s.getExpr(beforeColStr, true)
 		if ok {
 			// todo better way to do projections
 			delete(s.exprs, beforeColStr)
 		}
-		ids[i] = id
-		delete(s.exprs, beforeColStr)
-	}
-	for i := range s.cols {
-		name := strings.ToLower(cols[i])
-		s.cols[i].col = name
-		s.exprs[s.cols[i].String()] = ids[i]
-	}
+		ids = append(ids, id)
+		return true
+	})
+	var idx int
+	s.cols.iterSegments(func(seg []scopeColumn) bool {
+		for i := range seg {
+			name := strings.ToLower(cols[idx])
+			seg[i].col = name
+			s.exprs[seg[i].String()] = ids[idx]
+			idx++
+		}
+		return true
+	})
 }
 
 // push creates a new scope referencing the current scope as a
@@ -367,9 +384,10 @@ func (s *scope) aliasCte(alias string) *scope {
 	tabId := outScope.addTable(alias)
 	outScope.cols = nil
 	var colSet sql.ColSet
+	newCols := s.b.GetScopeColList(s.cols.len())
 	scopeMapping := make(map[sql.ColumnId]sql.Expression)
-	for _, c := range s.cols {
-		id := outScope.newColumn(scopeColumn{
+	s.cols.iterCols(func(i int, c scopeColumn) bool {
+		col := scopeColumn{
 			tableId:     tabId,
 			db:          c.db,
 			table:       alias,
@@ -378,13 +396,18 @@ func (s *scope) aliasCte(alias string) *scope {
 			id:          0,
 			typ:         c.typ,
 			nullable:    c.nullable,
-		})
+		}
+		id := outScope.newColumn(col, false)
+		col.id = id
+		newCols[i] = col
 		colSet.Add(sql.ColumnId(id))
 		// todo double scope mapping
 		if sq != nil {
 			scopeMapping[sql.ColumnId(id)] = sq.ScopeMapping[sql.ColumnId(c.id)]
 		}
-	}
+		return true
+	})
+	outScope.addScopeColList(newCols)
 
 	if sq != nil {
 		outScope.node = sq.WithScopeMapping(scopeMapping).WithColumns(colSet).WithId(tabId)
@@ -425,8 +448,12 @@ func (s *scope) copy() *scope {
 		ret.groupBy = &gbCopy
 	}
 	if s.cols != nil {
-		ret.cols = make([]scopeColumn, len(s.cols))
-		copy(ret.cols, s.cols)
+		newCols := s.b.GetScopeColList(s.cols.len())
+		s.cols.iterCols(func(i int, c scopeColumn) bool {
+			newCols[i] = c
+			return true
+		})
+		s.cols = newColList(newCols)
 	}
 	if !s.colset.Empty() {
 		ret.colset = s.colset.Copy()
@@ -481,8 +508,10 @@ func (s *scope) redirect(from, to scopeColumn) {
 // addColumn interns and saves the given column to this scope.
 // todo: new IR should absorb interning and use bitmaps for
 // column identity
-func (s *scope) addColumn(col scopeColumn) {
-	s.cols = append(s.cols, col)
+func (s *scope) addColumn(col scopeColumn, grow bool) {
+	if grow {
+		s.addSingleCol(col)
+	}
 	s.colset.Add(sql.ColumnId(col.id))
 	if s.exprs == nil {
 		s.exprs = make(map[string]columnId)
@@ -495,14 +524,14 @@ func (s *scope) addColumn(col scopeColumn) {
 // new columnId for referencing. newColumn builds a new expression
 // reference, whereas addColumn only adds a preexisting expression
 // definition to a given scope.
-func (s *scope) newColumn(col scopeColumn) columnId {
+func (s *scope) newColumn(col scopeColumn, grow bool) columnId {
 	s.b.colId++
 	col.id = s.b.colId
 	if col.table != "" {
 		tabId := s.addTable(col.table)
 		col.tableId = tabId
 	}
-	s.addColumn(col)
+	s.addColumn(col, grow)
 	return col.id
 }
 
@@ -528,14 +557,29 @@ func (s *scope) addExtraColumn(col scopeColumn) {
 	s.extraCols = append(s.extraCols, col)
 }
 
-func (s *scope) addColumns(cols []scopeColumn) {
-	s.cols = append(s.cols, cols...)
+func (s *scope) addColumns(cols *colList) {
+	if s.cols == nil {
+		s.cols = cols
+		return
+	}
+	l := s.cols
+	for l.next != nil {
+		l = l.next
+	}
+	l.next = cols
 }
 
 // appendColumnsFromScope merges column definitions for
 // multi-relational expressions.
 func (s *scope) appendColumnsFromScope(src *scope) {
-	s.cols = append(s.cols, src.cols...)
+	src.cols.iterSegments(func(seg []scopeColumn) bool {
+		// these become pass-through columns in the new scope.
+		for i := range seg {
+			seg[i].scalar = nil
+		}
+		return true
+	})
+	s.addColumns(src.cols)
 	if len(src.exprs) > 0 && s.exprs == nil {
 		s.exprs = make(map[string]columnId)
 	}
@@ -553,10 +597,6 @@ func (s *scope) appendColumnsFromScope(src *scope) {
 	}
 	for k, v := range src.tables {
 		s.tables[k] = v
-	}
-	// these become pass-through columns in the new scope.
-	for i := len(src.cols); i < len(s.cols); i++ {
-		s.cols[i].scalar = nil
 	}
 }
 
@@ -636,5 +676,84 @@ func (c scopeColumn) String() string {
 		return c.col
 	} else {
 		return fmt.Sprintf("%s.%s", c.table, c.col)
+	}
+}
+
+func (s *scope) addScopeColList(cols []scopeColumn) {
+	if s.cols == nil {
+		s.cols = newColList(cols)
+	} else {
+		s.cols.append(cols)
+	}
+}
+
+func (s *scope) addSingleCol(c scopeColumn) {
+	coll := s.b.GetScopeColList(1)
+	coll[0] = c
+	if s.cols == nil {
+		s.cols = newColList(coll)
+	} else {
+		s.cols.append(coll)
+	}
+}
+
+type colList struct {
+	segment []scopeColumn
+	next    *colList
+	cnt     int
+}
+
+func newColList(seg []scopeColumn) *colList {
+	return &colList{segment: seg, cnt: len(seg)}
+}
+
+func (cl *colList) len() int {
+	if cl == nil {
+		return 0
+	}
+	return cl.cnt
+}
+
+func (cl *colList) get(i int) scopeColumn {
+	l := cl
+	for i >= len(l.segment) {
+		i -= len(l.segment)
+		l = l.next
+	}
+	return l.segment[i]
+}
+
+func (cl *colList) append(seg []scopeColumn) {
+	lastS := cl
+	for lastS.next != nil {
+		lastS.cnt += len(seg)
+		lastS = lastS.next
+	}
+	lastS.cnt += len(seg)
+	lastS.next = newColList(seg)
+}
+
+func (cl *colList) iterCols(cb func(i int, c scopeColumn) bool) {
+	i := 0
+	l := cl
+	for l != nil {
+		seg := l.segment
+		for _, c := range seg {
+			if !cb(i, c) {
+				return
+			}
+			i++
+		}
+		l = l.next
+	}
+}
+
+func (cl *colList) iterSegments(cb func(seg []scopeColumn) bool) {
+	l := cl
+	for l != nil {
+		if !cb(l.segment) {
+			return
+		}
+		l = l.next
 	}
 }

@@ -104,11 +104,13 @@ func (b *Builder) buildRecursiveCte(inScope *scope, union *ast.SetOp, name strin
 
 			tabId := cteScope.addTable(name)
 			var colset sql.ColSet
-			for i, c := range cteScope.cols {
-				c.tableId = tabId
-				cteScope.cols[i] = c
-				colset.Add(sql.ColumnId(c.id))
-			}
+			cteScope.cols.iterSegments(func(seg []scopeColumn) bool {
+				for i := range seg {
+					seg[i].tableId = tabId
+					colset.Add(sql.ColumnId(seg[i].id))
+				}
+				return true
+			})
 
 			cteScope.node = sq.WithId(tabId).WithColumns(colset)
 		}
@@ -131,7 +133,7 @@ func (b *Builder) buildRecursiveCte(inScope *scope, union *ast.SetOp, name strin
 	var recSch sql.Schema
 	cteScope := leftScope.replace()
 	tableId := cteScope.addTable(name)
-	var cols sql.ColSet
+	var colIds sql.ColSet
 	scopeMapping := make(map[sql.ColumnId]sql.Expression)
 	{
 		rInit = leftScope.node
@@ -148,18 +150,24 @@ func (b *Builder) buildRecursiveCte(inScope *scope, union *ast.SetOp, name strin
 			recSch[i] = newC
 		}
 
-		for i, c := range leftScope.cols {
+		newCols := b.GetScopeColList(leftScope.cols.len())
+		leftScope.cols.iterCols(func(i int, c scopeColumn) bool {
 			c.typ = recSch[i].Type
 			c.scalar = nil
 			c.table = name
-			toId := cteScope.newColumn(c)
+			toId := cteScope.newColumn(c, false)
+			c.id = toId
+			c.tableId = cteScope.tables[c.table]
+			newCols[i] = c
 			scopeMapping[sql.ColumnId(toId)] = c.scalarGf()
-			cols.Add(sql.ColumnId(toId))
-		}
+			colIds.Add(sql.ColumnId(toId))
+			return true
+		})
+		cteScope.addScopeColList(newCols)
 		b.renameSource(cteScope, name, columns)
 
 		rTable = plan.NewRecursiveTable(name, recSch)
-		cteScope.node = rTable.WithId(tableId).WithColumns(cols)
+		cteScope.node = rTable.WithId(tableId).WithColumns(colIds)
 	}
 
 	rightInScope := inScope.replaceSubquery()
@@ -176,7 +184,7 @@ func (b *Builder) buildRecursiveCte(inScope *scope, union *ast.SetOp, name strin
 
 	orderByScope := b.analyzeOrderBy(cteScope, leftScope, union.OrderBy)
 	var sortFields sql.SortFields
-	for _, c := range orderByScope.cols {
+	orderByScope.cols.iterCols(func(i int, c scopeColumn) bool {
 		so := sql.Ascending
 		if c.descending {
 			so = sql.Descending
@@ -190,21 +198,22 @@ func (b *Builder) buildRecursiveCte(inScope *scope, union *ast.SetOp, name strin
 			Order:  so,
 		}
 		sortFields = append(sortFields, sf)
-	}
+		return true
+	})
 
 	rcte := plan.NewRecursiveCte(rInit, rightScope.node, name, columns, distinct, limit, sortFields)
 	rcte = rcte.WithSchema(recSch).WithWorking(rTable)
 	corr := leftSqScope.correlated().Union(rightInScope.correlated())
 	vol := leftSqScope.activeSubquery.volatile || rightInScope.activeSubquery.volatile
 
-	rcteId := rcte.WithId(tableId).WithColumns(cols)
+	rcteId := rcte.WithId(tableId).WithColumns(colIds)
 
 	sq := plan.NewSubqueryAlias(name, "", rcteId)
 	sq = sq.WithColumnNames(columns)
 	sq = sq.WithCorrelated(corr)
 	sq = sq.WithVolatile(vol)
 	sq = sq.WithScopeMapping(scopeMapping)
-	cteScope.node = sq.WithId(tableId).WithColumns(cols)
+	cteScope.node = sq.WithId(tableId).WithColumns(colIds)
 	b.renameSource(cteScope, name, columns)
 	return cteScope
 }

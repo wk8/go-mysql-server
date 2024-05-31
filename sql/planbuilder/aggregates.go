@@ -43,7 +43,7 @@ func (g *groupBy) addInCol(c scopeColumn) {
 }
 
 func (g *groupBy) addOutCol(c scopeColumn) columnId {
-	return g.outScope.newColumn(c)
+	return g.outScope.newColumn(c, true)
 }
 
 func (g *groupBy) hasAggs() bool {
@@ -137,7 +137,7 @@ func (b *Builder) buildGroupingCols(fromScope, projScope *scope, groupby ast.Gro
 				if intIdx < 1 {
 					b.handleErr(fmt.Errorf("expected positive integer order by literal"))
 				}
-				col = projScope.cols[intIdx-1]
+				col = projScope.cols.get(int(intIdx - 1))
 			}
 		default:
 			expr := b.buildScalar(fromScope, e)
@@ -190,18 +190,18 @@ func (b *Builder) buildAggregation(fromScope, projScope *scope, groupingCols []s
 		}
 	}
 	var aliases []sql.Expression
-	for _, col := range projScope.cols {
+	projScope.cols.iterCols(func(i int, c scopeColumn) bool {
 		// eval aliases in project scope
-		switch e := col.scalar.(type) {
+		switch e := c.scalar.(type) {
 		case *expression.Alias:
 			if !e.Unreferencable() {
-				aliases = append(aliases, e.WithId(sql.ColumnId(col.id)).(*expression.Alias))
+				aliases = append(aliases, e.WithId(sql.ColumnId(c.id)).(*expression.Alias))
 			}
 		default:
 		}
 
 		// projection dependencies -> table cols needed above
-		transform.InspectExpr(col.scalar, func(e sql.Expression) bool {
+		transform.InspectExpr(c.scalar, func(e sql.Expression) bool {
 			switch e := e.(type) {
 			case *expression.GetField:
 				colName := strings.ToLower(e.String())
@@ -214,7 +214,8 @@ func (b *Builder) buildAggregation(fromScope, projScope *scope, groupingCols []s
 			}
 			return false
 		})
-	}
+		return true
+	})
 	for _, e := range fromScope.extraCols {
 		// accessory cols used by ORDER_BY, HAVING
 		if !selectStr[e.String()] {
@@ -275,12 +276,12 @@ func (b *Builder) buildAggregateFunc(inScope *scope, name string, e *ast.FuncExp
 			}
 
 			col := scopeColumn{col: strings.ToLower(agg.String()), scalar: agg, typ: agg.Type(), nullable: agg.IsNullable()}
-			id := gb.outScope.newColumn(col)
+			id := gb.outScope.newColumn(col, false)
 			col.id = id
 
 			agg = agg.WithId(sql.ColumnId(id)).(sql.Aggregation)
-			gb.outScope.cols[len(gb.outScope.cols)-1].scalar = agg
 			col.scalar = agg
+			gb.outScope.addSingleCol(col)
 
 			gb.addAggStr(col)
 			return col.scalarGf()
@@ -303,11 +304,11 @@ func (b *Builder) buildAggregateFunc(inScope *scope, name string, e *ast.FuncExp
 			}
 
 			col := scopeColumn{col: strings.ToLower(agg.String()), scalar: agg, typ: agg.Type(), nullable: agg.IsNullable()}
-			id := gb.outScope.newColumn(col)
+			id := gb.outScope.newColumn(col, false)
 
 			agg = agg.WithId(sql.ColumnId(id)).(*aggregation.JsonArray)
-			gb.outScope.cols[len(gb.outScope.cols)-1].scalar = agg
 			col.scalar = agg
+			gb.outScope.addSingleCol(col)
 
 			col.id = id
 			gb.addAggStr(col)
@@ -393,13 +394,13 @@ func (b *Builder) buildAggregateFunc(inScope *scope, name string, e *ast.FuncExp
 	}
 
 	col := scopeColumn{col: aggName, scalar: agg, typ: aggType, nullable: agg.IsNullable()}
-	id := gb.outScope.newColumn(col)
+	id := gb.outScope.newColumn(col, false)
 
 	agg = agg.WithId(sql.ColumnId(id)).(sql.Aggregation)
-	gb.outScope.cols[len(gb.outScope.cols)-1].scalar = agg
 	col.scalar = agg
-
 	col.id = id
+	gb.outScope.addSingleCol(col)
+
 	gb.addAggStr(col)
 	return col.scalarGf()
 }
@@ -422,7 +423,7 @@ func (b *Builder) buildGroupConcat(inScope *scope, e *ast.GroupConcatExpr) sql.E
 
 	orderByScope := b.analyzeOrderBy(inScope, inScope, e.OrderBy)
 	var sortFields sql.SortFields
-	for _, c := range orderByScope.cols {
+	orderByScope.cols.iterCols(func(_ int, c scopeColumn) bool {
 		so := sql.Ascending
 		if c.descending {
 			so = sql.Descending
@@ -436,7 +437,8 @@ func (b *Builder) buildGroupConcat(inScope *scope, e *ast.GroupConcatExpr) sql.E
 			Order:  so,
 		}
 		sortFields = append(sortFields, sf)
-	}
+		return true
+	})
 
 	//TODO: this should be acquired at runtime, not at parse time, so fix this
 	gcml, err := b.ctx.GetSessionVariable(b.ctx, "group_concat_max_len")
@@ -450,14 +452,15 @@ func (b *Builder) buildGroupConcat(inScope *scope, e *ast.GroupConcatExpr) sql.E
 	aggName := strings.ToLower(plan.AliasSubqueryString(agg))
 	col := scopeColumn{col: aggName, scalar: agg, typ: agg.Type(), nullable: agg.IsNullable()}
 
-	id := gb.outScope.newColumn(col)
+	id := gb.outScope.newColumn(col, false)
+	col.id = id
 
 	agg = agg.WithId(sql.ColumnId(id)).(*aggregation.GroupConcat)
-	gb.outScope.cols[len(gb.outScope.cols)-1].scalar = agg
 	col.scalar = agg
 
+	gb.outScope.addSingleCol(col)
+
 	gb.addAggStr(col)
-	col.id = id
 	return col.scalarGf()
 }
 
@@ -518,11 +521,11 @@ func (b *Builder) buildWindowFunc(inScope *scope, name string, e *ast.FuncExpr, 
 	}
 
 	col := scopeColumn{col: strings.ToLower(win.String()), scalar: win, typ: win.Type(), nullable: win.IsNullable()}
-	id := inScope.newColumn(col)
+	id := inScope.newColumn(col, true)
 	col.id = id
 	win = win.WithId(sql.ColumnId(id)).(sql.WindowAdaptableExpression)
-	inScope.cols[len(inScope.cols)-1].scalar = win
 	col.scalar = win
+	inScope.addSingleCol(col)
 	inScope.windowFuncs = append(inScope.windowFuncs, col)
 	return col.scalarGf()
 }
@@ -550,7 +553,7 @@ func (b *Builder) buildWindow(fromScope, projScope *scope) *scope {
 		}
 	}
 	var aliases []sql.Expression
-	for _, col := range projScope.cols {
+	projScope.cols.iterCols(func(_ int, col scopeColumn) bool {
 		// eval aliases in project scope
 		switch e := col.scalar.(type) {
 		case *expression.Alias:
@@ -574,7 +577,8 @@ func (b *Builder) buildWindow(fromScope, projScope *scope) *scope {
 			}
 			return false
 		})
-	}
+		return true
+	})
 	for _, e := range fromScope.extraCols {
 		// accessory cols used by ORDER_BY, HAVING
 		if !selectStr[e.String()] {
@@ -786,25 +790,27 @@ func (b *Builder) buildInnerProj(fromScope, projScope *scope) *scope {
 	var proj []sql.Expression
 
 	// eval aliases in project scope
-	for _, col := range projScope.cols {
-		switch e := col.scalar.(type) {
+	projScope.cols.iterCols(func(i int, c scopeColumn) bool {
+		switch e := c.scalar.(type) {
 		case *expression.Alias:
 			if !e.Unreferencable() {
-				proj = append(proj, e.WithId(sql.ColumnId(col.id)).(*expression.Alias))
+				proj = append(proj, e.WithId(sql.ColumnId(c.id)).(*expression.Alias))
 			}
 		}
-	}
+		return true
+	})
 
 	aliasCnt := len(proj)
 
-	if len(proj) == 0 && !(len(fromScope.cols) == 1 && fromScope.cols[0].id == 0) {
+	if len(proj) == 0 && !(fromScope.cols.len() == 1 && fromScope.cols.get(0).id == 0) {
 		// remove redundant projection unless it is the single dual table column
 		return outScope
 	}
 
-	for _, c := range fromScope.cols {
+	fromScope.cols.iterCols(func(i int, c scopeColumn) bool {
 		proj = append(proj, c.scalarGf())
-	}
+		return true
+	})
 
 	// todo: fulltext indexes depend on match alias first
 	proj = append(proj[aliasCnt:], proj[:aliasCnt]...)
@@ -817,13 +823,15 @@ func (b *Builder) buildInnerProj(fromScope, projScope *scope) *scope {
 }
 
 // getMatchingCol returns the column in cols that matches the name, if it exists
-func getMatchingCol(cols []scopeColumn, name string) (scopeColumn, bool) {
-	for _, c := range cols {
+func getMatchingCol(cols *colList, name string) (ret scopeColumn, ok bool) {
+	cols.iterCols(func(i int, c scopeColumn) bool {
 		if strings.EqualFold(c.col, name) {
-			return c, true
+			ret = c
+			ok = true
 		}
-	}
-	return scopeColumn{}, false
+		return !ok
+	})
+	return
 }
 
 func (b *Builder) buildHaving(fromScope, projScope, outScope *scope, having *ast.Where) {
@@ -843,7 +851,7 @@ func (b *Builder) buildHaving(fromScope, projScope, outScope *scope, having *ast
 	// add columns from fromScope referenced in the groupBy
 	for _, c := range fromScope.groupBy.inCols {
 		if !havingScope.colset.Contains(sql.ColumnId(c.id)) {
-			havingScope.addColumn(c)
+			havingScope.addColumn(c, true)
 		}
 	}
 
@@ -854,7 +862,7 @@ func (b *Builder) buildHaving(fromScope, projScope, outScope *scope, having *ast
 			case *expression.GetField:
 				col, found := getMatchingCol(fromScope.cols, e.Name())
 				if found && !havingScope.colset.Contains(sql.ColumnId(col.id)) {
-					havingScope.addColumn(col)
+					havingScope.addColumn(col, true)
 				}
 			}
 			return false
@@ -864,24 +872,25 @@ func (b *Builder) buildHaving(fromScope, projScope, outScope *scope, having *ast
 	// Add columns from projScope referenced in any aggregate expressions, that are not already in the havingScope
 	// This prevents aliases with the same name from overriding columns in the fromScope
 	// Additionally, the original name from plain aliases (not expressions) are added to havingScope
-	for _, c := range projScope.cols {
+	projScope.cols.iterCols(func(_ int, c scopeColumn) bool {
 		if !havingScope.colset.Contains(sql.ColumnId(c.id)) {
-			havingScope.addColumn(c)
+			havingScope.addColumn(c, true)
 		}
 		// The unaliased column is allowed in having clauses regardless if it is just an aliased getfield and not an expression
 		alias, isAlias := c.scalar.(*expression.Alias)
 		if !isAlias {
-			continue
+			return true
 		}
 		gf, isGetField := alias.Child.(*expression.GetField)
 		if !isGetField {
-			continue
+			return true
 		}
 		col, found := getMatchingCol(fromScope.cols, gf.Name())
 		if found && !havingScope.colset.Contains(sql.ColumnId(col.id)) {
-			havingScope.addColumn(col)
+			havingScope.addColumn(col, true)
 		}
-	}
+		return true
+	})
 
 	havingScope.groupBy = fromScope.groupBy
 	h := b.buildScalar(havingScope, having.Expr)

@@ -83,7 +83,7 @@ func (b *Builder) buildSetOp(inScope *scope, u *ast.SetOp) (outScope *scope) {
 	orderByScope := b.analyzeOrderBy(leftScope, leftScope, u.OrderBy)
 
 	var sortFields sql.SortFields
-	for _, c := range orderByScope.cols {
+	orderByScope.cols.iterCols(func(_ int, c scopeColumn) bool {
 		so := sql.Ascending
 		if c.descending {
 			so = sql.Descending
@@ -108,7 +108,8 @@ func (b *Builder) buildSetOp(inScope *scope, u *ast.SetOp) (outScope *scope) {
 			Order:  so,
 		}
 		sortFields = append(sortFields, sf)
-	}
+		return true
+	})
 
 	n, ok := leftScope.node.(*plan.SetOp)
 	if ok {
@@ -137,9 +138,10 @@ func (b *Builder) buildSetOp(inScope *scope, u *ast.SetOp) (outScope *scope) {
 	}
 
 	var cols sql.ColSet
-	for _, c := range leftScope.cols {
+	leftScope.cols.iterCols(func(_ int, c scopeColumn) bool {
 		cols.Add(sql.ColumnId(c.id))
-	}
+		return true
+	})
 	b.tabId++
 	tabId := b.tabId
 	ret := plan.NewSetOp(setOpType, leftScope.node, rightScope.node, distinct, limit, offset, sortFields).WithId(tabId).WithColumns(cols)

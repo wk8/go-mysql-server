@@ -147,6 +147,7 @@ type Engine struct {
 	Version           sql.AnalyzerVersion
 	EventScheduler    *eventscheduler.EventScheduler
 	Parser            sql.Parser
+	BinderPool        sync.Pool
 }
 
 type ColumnWithRawDefault struct {
@@ -175,6 +176,8 @@ func New(a *analyzer.Analyzer, cfg *Config) *Engine {
 	})
 	a.Catalog.RegisterFunction(emptyCtx, function.GetLockingFuncs(ls)...)
 
+	parser := sql.NewMysqlParser()
+
 	ret := &Engine{
 		Analyzer:          a,
 		MemoryManager:     sql.NewMemoryManager(sql.ProcessMemory),
@@ -185,7 +188,12 @@ func New(a *analyzer.Analyzer, cfg *Config) *Engine {
 		PreparedDataCache: NewPreparedDataCache(),
 		mu:                &sync.Mutex{},
 		EventScheduler:    nil,
-		Parser:            sql.NewMysqlParser(),
+		Parser:            parser,
+		BinderPool: sync.Pool{
+			New: func() any {
+				return planbuilder.New(emptyCtx, a.Catalog, parser)
+			},
+		},
 	}
 	ret.ReadOnly.Store(cfg.IsReadOnly)
 	return ret
@@ -368,6 +376,11 @@ func (e *Engine) QueryWithBindings(ctx *sql.Context, query string, parsed sqlpar
 		return nil, nil, err
 	}
 
+	defer func() {
+		binder.Reset()
+		e.BinderPool.Put(binder)
+	}()
+
 	// Give the integrator a chance to reject the session before proceeding
 	// TODO: this check doesn't belong here
 	err = ctx.Session.ValidateSession(ctx)
@@ -515,7 +528,8 @@ func (e *Engine) preparedStatement(ctx *sql.Context, query string, parsed sqlpar
 		preparedAst, preparedDataFound = e.PreparedDataCache.GetCachedStmt(ctx.Session.ID(), query)
 	}
 
-	binder := planbuilder.New(ctx, e.Analyzer.Catalog, e.Parser)
+	binder := e.BinderPool.Get().(*planbuilder.Builder)
+	binder.SetCtx(ctx)
 	if preparedDataFound {
 		parsed = preparedAst
 		binder.SetBindings(bindings)

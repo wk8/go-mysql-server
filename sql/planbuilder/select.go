@@ -226,8 +226,10 @@ func (b *Builder) renameSource(scope *scope, table string, cols []string) {
 	if len(cols) > 0 {
 		scope.setColAlias(cols)
 	}
-	for i, c := range scope.cols {
-		c.scalar = nil
-		scope.cols[i] = c
-	}
+	scope.cols.iterSegments(func(seg []scopeColumn) bool {
+		for i := range seg {
+			seg[i].scalar = nil
+		}
+		return true
+	})
 }

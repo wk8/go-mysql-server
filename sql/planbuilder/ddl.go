@@ -1188,7 +1188,7 @@ func (b *Builder) tableSpecToSchema(inScope, outScope *scope, db sql.Database, t
 			col:      strings.ToLower(column.Name),
 			typ:      column.Type,
 			nullable: column.Nullable,
-		})
+		}, true)
 	}
 
 	for i, def := range defaults {
@@ -1370,7 +1370,7 @@ func (b *Builder) resolveSchemaDefaults(inScope *scope, schema sql.Schema) sql.S
 	if len(schema) == 0 {
 		return nil
 	}
-	if len(inScope.cols) < len(schema) {
+	if inScope.cols.len() < len(schema) {
 		// alter statements only add definitions for modified columns
 		// backfill rest of columns
 		resolveScope := inScope.replace()
@@ -1381,7 +1381,7 @@ func (b *Builder) resolveSchemaDefaults(inScope *scope, schema sql.Schema) sql.S
 				col:      strings.ToLower(col.Name),
 				typ:      col.Type,
 				nullable: col.Nullable,
-			})
+			}, true)
 		}
 		inScope = resolveScope
 	}
@@ -1399,9 +1399,13 @@ func (b *Builder) resolveSchemaDefaults(inScope *scope, schema sql.Schema) sql.S
 			start := part[0]
 			end := part[1]
 			subScope := inScope.replace()
+			newCols := b.GetScopeColList(end - start)
 			for i := start; i < end; i++ {
-				subScope.addColumn(inScope.cols[i])
+				c := inScope.cols.get(i)
+				newCols[i-start] = c
+				subScope.addColumn(c, false)
 			}
+			subScope.addScopeColList(newCols)
 			for _, col := range newSch[start:end] {
 				col.Default = b.resolveColumnDefaultExpression(subScope, col, col.Default)
 				col.Generated = b.resolveColumnDefaultExpression(subScope, col, col.Generated)

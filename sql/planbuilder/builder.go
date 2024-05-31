@@ -49,6 +49,7 @@ type Builder struct {
 	insertActive    bool
 	nesting         int
 	parser          sql.Parser
+	colBuf          []scopeColumn
 }
 
 // BindvarContext holds bind variable replacement literals.
@@ -115,6 +116,10 @@ func New(ctx *sql.Context, cat sql.Catalog, p sql.Parser) *Builder {
 	}
 }
 
+func (b *Builder) SetCtx(ctx *sql.Context) {
+	b.ctx = ctx
+}
+
 func (b *Builder) SetDebug(val bool) {
 	b.f.debug = val
 }
@@ -155,6 +160,18 @@ func (b *Builder) TriggerCtx() *TriggerContext {
 	return b.triggerCtx
 }
 
+const colBufSize = 10 * 1024
+
+func (b *Builder) GetScopeColList(n int) []scopeColumn {
+	var ret []scopeColumn
+	if n > len(b.colBuf) {
+		b.colBuf = make([]scopeColumn, colBufSize)
+	}
+	ret = b.colBuf[:n]
+	b.colBuf = b.colBuf[n:]
+	return ret
+}
+
 func (b *Builder) newScope() *scope {
 	return &scope{b: b}
 }
@@ -170,6 +187,7 @@ func (b *Builder) Reset() {
 	b.triggerCtx = nil
 	b.viewCtx = nil
 	b.nesting = 0
+	b.ctx = nil
 }
 
 type parseErr struct {
@@ -373,7 +391,7 @@ func (b *Builder) buildVirtualTableScan(db string, tab sql.Table) *plan.VirtualC
 			originalCol: c.Name,
 			typ:         c.Type,
 			nullable:    c.Nullable,
-		})
+		}, true)
 	}
 
 	tableId := tableScope.tables[strings.ToLower(tab.Name())]

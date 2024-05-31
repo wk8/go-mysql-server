@@ -85,18 +85,18 @@ func (b *Builder) analyzeSelectList(inScope, outScope *scope, selectExprs ast.Se
 				b.handleErr(err)
 			}
 			e = e.WithIndex(int(id)).(*expression.GetField)
-			outScope.addColumn(scopeColumn{tableId: inScope.tables[e.Table()], table: e.Table(), db: e.Database(), col: e.Name(), scalar: e, typ: e.Type(), nullable: e.IsNullable(), id: id})
+			outScope.addColumn(scopeColumn{tableId: inScope.tables[e.Table()], table: e.Table(), db: e.Database(), col: e.Name(), scalar: e, typ: e.Type(), nullable: e.IsNullable(), id: id}, true)
 		case *expression.Star:
 			tableName := strings.ToLower(e.Table)
-			if tableName == "" && len(inScope.cols) == 1 && inScope.cols[0].col == "" && inScope.cols[0].table == "dual" {
+			if tableName == "" && inScope.cols.len() == 1 && inScope.cols.get(0).col == "" && inScope.cols.get(0).table == "dual" {
 				err := sql.ErrNoTablesUsed.New()
 				b.handleErr(err)
 			}
-			startLen := len(outScope.cols)
-			for _, c := range inScope.cols {
+			startLen := outScope.cols.len()
+			inScope.cols.iterCols(func(i int, c scopeColumn) bool {
 				// unqualified columns that are redirected should not be replaced
 				if col, ok := inScope.redirectCol[c.col]; tableName == "" && ok && col != c {
-					continue
+					return true
 				}
 				if strings.EqualFold(c.table, tableName) || tableName == "" {
 					gf := c.scalarGf()
@@ -108,10 +108,11 @@ func (b *Builder) analyzeSelectList(inScope, outScope *scope, selectExprs ast.Se
 					}
 					c.id = id
 					c.scalar = gf
-					outScope.addColumn(c)
+					outScope.addColumn(c, true)
 				}
-			}
-			if tableName != "" && len(outScope.cols) == startLen {
+				return true
+			})
+			if tableName != "" && outScope.cols.len() == startLen {
 				err := sql.ErrTableNotFound.New(tableName)
 				b.handleErr(err)
 			}
@@ -143,20 +144,21 @@ func (b *Builder) analyzeSelectList(inScope, outScope *scope, selectExprs ast.Se
 				col = scopeColumn{col: e.Name(), scalar: e, typ: e.Type(), nullable: e.IsNullable()}
 			}
 			if e.Unreferencable() {
-				outScope.addColumn(col)
+				outScope.addColumn(col, true)
 			} else {
-				id := outScope.newColumn(col)
+				id := outScope.newColumn(col, false)
 				col.id = id
 				e = e.WithId(sql.ColumnId(id)).(*expression.Alias)
-				outScope.cols[len(outScope.cols)-1].scalar = e
 				col.scalar = e
-				tempScope.addColumn(col)
+
+				outScope.addSingleCol(col)
+				tempScope.addColumn(col, true)
 			}
 			exprs = append(exprs, e)
 		default:
 			exprs = append(exprs, pe)
 			col := scopeColumn{col: pe.String(), scalar: pe, typ: pe.Type()}
-			outScope.newColumn(col)
+			outScope.newColumn(col, true)
 		}
 	}
 
@@ -194,10 +196,11 @@ func (b *Builder) selectExprToExpression(inScope *scope, se ast.SelectExpr) sql.
 }
 
 func (b *Builder) buildProjection(inScope, outScope *scope) {
-	projections := make([]sql.Expression, len(outScope.cols))
-	for i, sc := range outScope.cols {
+	projections := make([]sql.Expression, outScope.cols.len())
+	outScope.cols.iterCols(func(i int, sc scopeColumn) bool {
 		projections[i] = sc.scalar
-	}
+		return true
+	})
 	proj, err := b.f.buildProject(plan.NewProject(projections, inScope.node), outScope.refsSubquery)
 	if err != nil {
 		b.handleErr(err)

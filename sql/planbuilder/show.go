@@ -130,7 +130,7 @@ func (b *Builder) buildShowTable(inScope *scope, s *ast.Show, showType string) (
 			col:      strings.ToLower(c.Name),
 			typ:      c.Type,
 			nullable: c.Nullable,
-		})
+		}, true)
 	}
 
 	showCreate := plan.NewShowCreateTableWithAsOf(tableScope.node, showType == "create view", asOfExpr)
@@ -209,7 +209,7 @@ func (b *Builder) buildShowAllTriggers(inScope *scope, s *ast.Show) (outScope *s
 			col:      strings.ToLower(c.Name),
 			typ:      c.Type,
 			nullable: c.Nullable,
-		})
+		}, true)
 	}
 	var filter sql.Expression
 	if s.ShowTablesOpt != nil {
@@ -280,7 +280,7 @@ func (b *Builder) buildShowAllEvents(inScope *scope, s *ast.Show) (outScope *sco
 		outScope.newColumn(scopeColumn{
 			db:    c.DatabaseSource,
 			table: c.Source,
-			col:   c.Name, typ: c.Type, nullable: c.Nullable})
+			col:   c.Name, typ: c.Type, nullable: c.Nullable}, true)
 	}
 	var filter sql.Expression
 	if s.ShowTablesOpt != nil {
@@ -345,7 +345,7 @@ func (b *Builder) buildShowProcedureStatus(inScope *scope, s *ast.Show) (outScop
 		outScope.newColumn(scopeColumn{
 			db:    c.DatabaseSource,
 			table: c.Source,
-			col:   c.Name, typ: c.Type, nullable: c.Nullable})
+			col:   c.Name, typ: c.Type, nullable: c.Nullable}, true)
 	}
 	if s.Filter != nil {
 		if s.Filter.Filter != nil {
@@ -381,7 +381,7 @@ func (b *Builder) buildShowFunctionStatus(inScope *scope, s *ast.Show) (outScope
 		outScope.newColumn(scopeColumn{
 			db:    c.DatabaseSource,
 			table: c.Source,
-			col:   c.Name, typ: c.Type, nullable: c.Nullable})
+			col:   c.Name, typ: c.Type, nullable: c.Nullable}, true)
 	}
 
 	if s.Filter != nil {
@@ -426,7 +426,7 @@ func (b *Builder) buildShowTableStatus(inScope *scope, s *ast.Show) (outScope *s
 			col:      strings.ToLower(c.Name),
 			typ:      c.Type,
 			nullable: c.Nullable,
-		})
+		}, true)
 	}
 
 	var filter sql.Expression
@@ -523,7 +523,7 @@ func (b *Builder) buildShowVariables(inScope *scope, s *ast.Show) (outScope *sco
 			col:      strings.ToLower(c.Name),
 			typ:      c.Type,
 			nullable: c.Nullable,
-		})
+		}, true)
 	}
 
 	var filter sql.Expression
@@ -623,7 +623,7 @@ func (b *Builder) buildShowAllTables(inScope *scope, s *ast.Show) (outScope *sco
 		outScope.newColumn(scopeColumn{
 			db:    strings.ToLower(c.DatabaseSource),
 			table: strings.ToLower(c.Source),
-			col:   c.Name, typ: c.Type, nullable: c.Nullable})
+			col:   c.Name, typ: c.Type, nullable: c.Nullable}, true)
 	}
 
 	if s.ShowTablesOpt.Filter != nil {
@@ -655,7 +655,7 @@ func (b *Builder) buildShowAllDatabases(inScope *scope, s *ast.Show) (outScope *
 		outScope.newColumn(scopeColumn{
 			db:    strings.ToLower(c.DatabaseSource),
 			table: strings.ToLower(c.Source),
-			col:   c.Name, typ: c.Type, nullable: c.Nullable})
+			col:   c.Name, typ: c.Type, nullable: c.Nullable}, true)
 	}
 	var filter sql.Expression
 	if s.Filter != nil {
@@ -709,7 +709,7 @@ func (b *Builder) buildShowAllColumns(inScope *scope, s *ast.Show) (outScope *sc
 			col:      strings.ToLower(c.Name),
 			typ:      c.Type,
 			nullable: c.Nullable,
-		})
+		}, true)
 	}
 
 	var node sql.Node = show
@@ -789,7 +789,7 @@ func (b *Builder) buildShowCollation(inScope *scope, s *ast.Show) (outScope *sco
 			col:      strings.ToLower(c.Name),
 			typ:      c.Type,
 			nullable: c.Nullable,
-		})
+		}, true)
 	}
 
 	if s.ShowCollationFilterOpt != nil {
@@ -852,7 +852,7 @@ func (b *Builder) buildShowStatus(inScope *scope, s *ast.Show) (outScope *scope)
 			col:      strings.ToLower(c.Name),
 			typ:      c.Type,
 			nullable: c.Nullable,
-		})
+		}, true)
 	}
 
 	var filter sql.Expression
@@ -888,7 +888,7 @@ func (b *Builder) buildShowCharset(inScope *scope, s *ast.Show) (outScope *scope
 		outScope.newColumn(scopeColumn{
 			db:    strings.ToLower(c.DatabaseSource),
 			table: strings.ToLower(c.Source),
-			col:   c.Name, typ: c.Type, nullable: c.Nullable})
+			col:   c.Name, typ: c.Type, nullable: c.Nullable}, true)
 	}
 
 	var filter sql.Expression

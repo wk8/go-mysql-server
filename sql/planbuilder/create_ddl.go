@@ -66,17 +66,18 @@ func (b *Builder) buildCreateTrigger(inScope *scope, query string, c *ast.DDL) (
 	// update/delete have "old"
 	newScope := tableScope.replace()
 	oldScope := tableScope.replace()
-	for _, col := range tableScope.cols {
+	tableScope.cols.iterCols(func(_ int, col scopeColumn) bool {
 		switch c.TriggerSpec.Event {
 		case ast.InsertStr:
-			newScope.newColumn(col)
+			newScope.newColumn(col, true)
 		case ast.UpdateStr:
-			newScope.newColumn(col)
-			oldScope.newColumn(col)
+			newScope.newColumn(col, true)
+			oldScope.newColumn(col, true)
 		case ast.DeleteStr:
-			oldScope.newColumn(col)
+			oldScope.newColumn(col, true)
 		}
-	}
+		return true
+	})
 	newScope.setTableAlias("new")
 	oldScope.setTableAlias("old")
 	triggerScope := tableScope.replace()
@@ -458,8 +459,8 @@ func (b *Builder) buildCreateView(inScope *scope, query string, c *ast.DDL) (out
 	}
 
 	if len(c.ViewSpec.Columns) > 0 {
-		if len(c.ViewSpec.Columns) != len(queryScope.cols) {
-			err := sql.ErrInvalidColumnNumber.New(len(queryScope.cols), len(c.ViewSpec.Columns))
+		if len(c.ViewSpec.Columns) != queryScope.cols.len() {
+			err := sql.ErrInvalidColumnNumber.New(queryScope.cols.len(), len(c.ViewSpec.Columns))
 			b.handleErr(err)
 		}
 		queryAlias = queryAlias.WithColumnNames(columnsToStrings(c.ViewSpec.Columns))

@@ -58,7 +58,7 @@ func (b *Builder) analyzeOrderBy(fromScope, projScope *scope, order ast.OrderBy)
 			c, ok := projScope.resolveColumn(dbName, tblName, colName, false, false)
 			if ok {
 				c.descending = descending
-				outScope.addColumn(c)
+				outScope.addColumn(c, true)
 				continue
 			}
 
@@ -70,7 +70,7 @@ func (b *Builder) analyzeOrderBy(fromScope, projScope *scope, order ast.OrderBy)
 			}
 			c.descending = descending
 			c.scalar = c.scalarGf()
-			outScope.addColumn(c)
+			outScope.addColumn(c, true)
 			fromScope.addExtraColumn(c)
 		case *ast.SQLVal:
 			// integer literal into projScope
@@ -90,26 +90,28 @@ func (b *Builder) analyzeOrderBy(fromScope, projScope *scope, order ast.OrderBy)
 				if intIdx < 0 {
 					continue
 				}
-				if projScope == nil || len(projScope.cols) == 0 {
+				if projScope == nil || projScope.cols.len() == 0 {
 					err := fmt.Errorf("invalid order by ordinal context")
 					b.handleErr(err)
 				}
 				// MySQL throws a column not found for intIdx = 0 and intIdx > len(cols)
-				if intIdx > int64(len(projScope.cols)) || intIdx == 0 {
+				if intIdx > int64(projScope.cols.len()) || intIdx == 0 {
 					err := sql.ErrColumnNotFound.New(fmt.Sprintf("%d", intIdx))
 					b.handleErr(err)
 				}
-				target := projScope.cols[intIdx-1]
+				target := projScope.cols.get(int(intIdx - 1))
 				scalar := target.scalar
 				if scalar == nil {
 					scalar = target.scalarGf()
 				}
 				if a, ok := target.scalar.(*expression.Alias); ok && a.Unreferencable() && fromScope.groupBy != nil {
-					for _, c := range fromScope.groupBy.outScope.cols {
+					fromScope.groupBy.outScope.cols.iterCols(func(_ int, c scopeColumn) bool {
 						if target.id == c.id {
 							target = c
+							return false
 						}
-					}
+						return true
+					})
 				}
 				outScope.addColumn(scopeColumn{
 					tableId:    target.tableId,
@@ -119,7 +121,7 @@ func (b *Builder) analyzeOrderBy(fromScope, projScope *scope, order ast.OrderBy)
 					nullable:   target.nullable,
 					descending: descending,
 					id:         target.id,
-				})
+				}, true)
 			}
 		default:
 			// track order by col
@@ -161,7 +163,7 @@ func (b *Builder) analyzeOrderBy(fromScope, projScope *scope, order ast.OrderBy)
 				nullable:   expr.IsNullable(),
 				descending: descending,
 			}
-			outScope.newColumn(col)
+			outScope.newColumn(col, true)
 		}
 	}
 	return
@@ -200,11 +202,11 @@ func (b *Builder) normalizeValArg(e *ast.SQLVal) ast.Expr {
 }
 
 func (b *Builder) buildOrderBy(inScope, orderByScope *scope) {
-	if len(orderByScope.cols) == 0 {
+	if orderByScope.cols.len() == 0 {
 		return
 	}
 	var sortFields sql.SortFields
-	for _, c := range orderByScope.cols {
+	orderByScope.cols.iterCols(func(i int, c scopeColumn) bool {
 		so := sql.Ascending
 		if c.descending {
 			so = sql.Descending
@@ -218,7 +220,8 @@ func (b *Builder) buildOrderBy(inScope, orderByScope *scope) {
 			Order:  so,
 		}
 		sortFields = append(sortFields, sf)
-	}
+		return true
+	})
 	sort := plan.NewSort(sortFields, inScope.node)
 	inScope.node = sort
 	return

@@ -35,7 +35,7 @@ func (b *Builder) buildFrom(inScope *scope, te ast.TableExprs) (outScope *scope)
 		outScope.ast = te
 		outScope.node = plan.NewResolvedDualTable()
 		// new unreferenceable column to mirror empty table schema
-		outScope.addColumn(scopeColumn{table: "dual"})
+		outScope.addColumn(scopeColumn{table: "dual"}, true)
 		return
 	}
 
@@ -173,15 +173,18 @@ func (b *Builder) buildUsingJoin(inScope, leftScope, rightScope *scope, te *ast.
 	outScope = inScope.push()
 
 	// Fill in USING columns for NATURAL JOINs
+	var done bool
 	if len(te.Condition.Using) == 0 {
-		for _, lCol := range leftScope.cols {
-			for _, rCol := range rightScope.cols {
+		leftScope.cols.iterCols(func(_ int, lCol scopeColumn) bool {
+			rightScope.cols.iterCols(func(_ int, rCol scopeColumn) bool {
 				if strings.EqualFold(lCol.col, rCol.col) {
 					te.Condition.Using = append(te.Condition.Using, ast.NewColIdent(lCol.col))
-					break
+					done = true
 				}
-			}
-		}
+				return !done
+			})
+			return !done
+		})
 	}
 
 	// Right joins swap left and right scopes.
@@ -218,26 +221,30 @@ func (b *Builder) buildUsingJoin(inScope, leftScope, rightScope *scope, te *ast.
 
 	// Add common columns first, then left, then right.
 	// The order of columns for the common section must match left table
-	for _, lCol := range left.cols {
+	left.cols.iterCols(func(_ int, lCol scopeColumn) bool {
 		if _, ok := usingCols[lCol.col]; ok {
-			outScope.addColumn(lCol)
+			outScope.addColumn(lCol, true)
 		}
-	}
-	for _, rCol := range right.cols {
+		return true
+	})
+	right.cols.iterCols(func(_ int, rCol scopeColumn) bool {
 		if _, ok := usingCols[rCol.col]; ok {
-			outScope.addColumn(rCol)
+			outScope.addColumn(rCol, true)
 		}
-	}
-	for _, lCol := range left.cols {
+		return true
+	})
+	left.cols.iterCols(func(_ int, lCol scopeColumn) bool {
 		if _, ok := usingCols[lCol.col]; !ok {
-			outScope.addColumn(lCol)
+			outScope.addColumn(lCol, true)
 		}
-	}
-	for _, rCol := range right.cols {
+		return true
+	})
+	right.cols.iterCols(func(_ int, rCol scopeColumn) bool {
 		if _, ok := usingCols[rCol.col]; !ok {
-			outScope.addColumn(rCol)
+			outScope.addColumn(rCol, true)
 		}
-	}
+		return true
+	})
 
 	// joining two tables with no common columns is just cross join
 	if len(te.Condition.Using) == 0 {
@@ -311,7 +318,7 @@ func (b *Builder) buildDataSource(inScope *scope, te ast.TableExpr) (outScope *s
 				sq = sq.WithColumnNames(renameCols)
 			}
 
-			if len(renameCols) > 0 && len(fromScope.cols) != len(renameCols) {
+			if len(renameCols) > 0 && fromScope.cols.len() != len(renameCols) {
 				err := sql.ErrColumnCountMismatch.New()
 				b.handleErr(err)
 			}
@@ -321,12 +328,13 @@ func (b *Builder) buildDataSource(inScope *scope, te ast.TableExpr) (outScope *s
 
 			scopeMapping := make(map[sql.ColumnId]sql.Expression)
 			var colSet sql.ColSet
-			for i, c := range fromScope.cols {
+			newCols := b.GetScopeColList(fromScope.cols.len())
+			fromScope.cols.iterCols(func(i int, c scopeColumn) bool {
 				col := c.col
 				if len(renameCols) > 0 {
 					col = renameCols[i]
 				}
-				toId := outScope.newColumn(scopeColumn{
+				newCol := scopeColumn{
 					tableId:     tabId,
 					db:          c.db,
 					table:       alias,
@@ -335,10 +343,15 @@ func (b *Builder) buildDataSource(inScope *scope, te ast.TableExpr) (outScope *s
 					id:          0,
 					typ:         c.typ,
 					nullable:    c.nullable,
-				})
+				}
+				toId := outScope.newColumn(newCol, false)
+				newCol.id = toId
+				newCols[i] = newCol
 				colSet.Add(sql.ColumnId(toId))
 				scopeMapping[sql.ColumnId(toId)] = c.scalarGf()
-			}
+				return true
+			})
+			outScope.addScopeColList(newCols)
 			outScope.node = sq.WithScopeMapping(scopeMapping).WithColumns(colSet).WithId(tabId)
 			return
 		case *ast.ValuesStatement:
@@ -369,7 +382,7 @@ func (b *Builder) buildDataSource(inScope *scope, te ast.TableExpr) (outScope *s
 			tabId := outScope.addTable(tableName)
 			var cols sql.ColSet
 			for _, c := range vdt.Schema() {
-				id := outScope.newColumn(scopeColumn{col: c.Name, db: c.DatabaseSource, table: tableName, typ: c.Type, nullable: c.Nullable})
+				id := outScope.newColumn(scopeColumn{col: c.Name, db: c.DatabaseSource, table: tableName, typ: c.Type, nullable: c.Nullable}, true)
 				cols.Add(sql.ColumnId(id))
 			}
 			var renameCols []string
@@ -526,7 +539,7 @@ func (b *Builder) buildTableFunc(inScope *scope, t *ast.TableFuncExpr) (outScope
 			table: name,
 			col:   c.Name,
 			typ:   c.Type,
-		})
+		}, true)
 		colset.Add(sql.ColumnId(id))
 	}
 	outScope.node = newAlias.WithColumns(colset).WithId(tabId)
@@ -606,7 +619,7 @@ func (b *Builder) buildJSONTable(inScope *scope, t *ast.JSONTableExpr) (outScope
 				table: alias,
 				col:   col.Opts.Name,
 				typ:   col.Opts.Type,
-			})
+			}, true)
 			colset.Add(sql.ColumnId(id))
 		}
 	}
@@ -724,21 +737,28 @@ func (b *Builder) buildResolvedTable(inScope *scope, db, schema, name string, as
 	}
 
 	tabId := outScope.addTable(strings.ToLower(tab.Name()))
-	var cols sql.ColSet
+	var colIds sql.ColSet
+	newCols := b.GetScopeColList(len(tab.Schema()))
 
-	for _, c := range tab.Schema() {
-		id := outScope.newColumn(scopeColumn{
+	for i, c := range tab.Schema() {
+		c := scopeColumn{
 			db:          db,
 			table:       strings.ToLower(tab.Name()),
 			col:         strings.ToLower(c.Name),
 			originalCol: c.Name,
 			typ:         c.Type,
 			nullable:    c.Nullable,
-		})
-		cols.Add(sql.ColumnId(id))
+		}
+		id := outScope.newColumn(c, false)
+		c.id = id
+		c.tableId = outScope.tables[c.table]
+		newCols[i] = c
+		colIds.Add(sql.ColumnId(id))
 	}
 
-	rt = rt.WithId(tabId).WithColumns(cols).(*plan.ResolvedTable)
+	outScope.addScopeColList(newCols)
+
+	rt = rt.WithId(tabId).WithColumns(colIds).(*plan.ResolvedTable)
 	outScope.node = rt
 
 	if dt, _ := rt.Table.(sql.DynamicColumnsTable); dt != nil {
@@ -763,14 +783,14 @@ func (b *Builder) buildResolvedTable(inScope *scope, db, schema, name string, as
 			}
 			if !strings.EqualFold(c.Source, startSource) {
 				startSource = c.Source
-				tmpSch := b.resolveSchemaDefaults(tmpScope, sch[i-len(tmpScope.cols):i])
+				tmpSch := b.resolveSchemaDefaults(tmpScope, sch[i-tmpScope.cols.len():i])
 				newSch = append(newSch, tmpSch...)
 				tmpScope = inScope.push()
 			}
-			tmpScope.newColumn(newCol)
+			tmpScope.newColumn(newCol, true)
 		}
-		if len(tmpScope.cols) > 0 {
-			tmpSch := b.resolveSchemaDefaults(tmpScope, sch[len(sch)-len(tmpScope.cols):len(sch)])
+		if tmpScope.cols.len() > 0 {
+			tmpSch := b.resolveSchemaDefaults(tmpScope, sch[len(sch)-tmpScope.cols.len():len(sch)])
 			newSch = append(newSch, tmpSch...)
 		}
 		rt.Table, err = dt.WithDefaultsSchema(newSch)
@@ -794,7 +814,7 @@ func resolvedViewScope(outScope *scope, view sql.Node, db string, name string) (
 			originalCol: c.Name,
 			typ:         c.Type,
 			nullable:    c.Nullable,
-		})
+		}, true)
 		cols.Add(sql.ColumnId(id))
 	}
 	if tin, ok := view.(plan.TableIdNode); ok {

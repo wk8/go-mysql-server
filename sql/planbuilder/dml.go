@@ -69,7 +69,7 @@ func (b *Builder) buildInsert(inScope *scope, i *ast.Insert) (outScope *scope) {
 		// If no column names were specified in the query, go ahead and fill
 		// them all in now that the destination is resolved.
 		// TODO: setting the plan field directly is not great
-		if len(columns) == 0 && len(destScope.cols) > 0 && rt != nil {
+		if len(columns) == 0 && destScope.cols.len() > 0 && rt != nil {
 			schema := rt.Schema()
 			columns = make([]string, len(schema))
 			for i, col := range schema {
@@ -92,16 +92,25 @@ func (b *Builder) buildInsert(inScope *scope, i *ast.Insert) (outScope *scope) {
 		// TODO: on duplicate expressions need to reference both VALUES and
 		//  derived columns equally in ON DUPLICATE UPDATE expressions.
 		combinedScope := inScope.replace()
-		for i, c := range destScope.cols {
-			combinedScope.newColumn(c)
-			if len(srcScope.cols) == len(destScope.cols) {
-				combinedScope.newColumn(srcScope.cols[i])
+		newCols := b.GetScopeColList(destScope.cols.len() * 2)
+		destScope.cols.iterCols(func(i int, c scopeColumn) bool {
+			newCols[i] = c
+			combinedScope.newColumn(c, false)
+			if srcScope.cols.len() == destScope.cols.len() {
+				srcCol := srcScope.cols.get(i)
+				id := combinedScope.newColumn(srcCol, false)
+				srcCol.id = id
+				newCols[i*2+1] = srcCol
 			} else {
 				// check for VALUES refs
 				c.table = OnDupValuesPrefix
-				combinedScope.newColumn(c)
+				id := combinedScope.newColumn(c, false)
+				c.id = id
+				newCols[i*2+1] = c
 			}
-		}
+			return true
+		})
+		combinedScope.addScopeColList(newCols)
 		onDupExprs = b.buildOnDupUpdateExprs(combinedScope, destScope, ast.AssignmentExprs(i.OnDup))
 	}
 
@@ -539,7 +548,7 @@ func (b *Builder) buildUpdate(inScope *scope, u *ast.Update) (outScope *scope) {
 							col:      strings.ToLower(c.Name),
 							typ:      c.Type,
 							nullable: c.Nullable,
-						})
+						}, true)
 					}
 					checks = append(checks, b.loadChecksFromTable(tableScope, rt.Table)...)
 				}
