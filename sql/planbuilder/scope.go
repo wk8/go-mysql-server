@@ -36,12 +36,6 @@ var colPool = sync.Pool{
 	},
 }
 
-var tablesPool = sync.Pool{
-	New: func() any {
-		return make(map[string]sql.TableId, 0)
-	},
-}
-
 // scope tracks relational dependencies necessary to type check expressions,
 // resolve name definitions, and build relational nodes.
 type scope struct {
@@ -348,7 +342,6 @@ func (s *scope) push() *scope {
 		b:      s.b,
 		parent: s,
 		cols:   colPool.Get().([]scopeColumn),
-		tables: tablesPool.Get().(map[string]sql.TableId),
 	}
 	s.b.cleanup = append(s.b.cleanup, new)
 	if s.procActive() {
@@ -360,10 +353,6 @@ func (s *scope) push() *scope {
 func (s *scope) close() {
 	s.cols = s.cols[:0]
 	colPool.Put(s.cols)
-	for k := range s.tables {
-		delete(s.tables, k)
-	}
-	tablesPool.Put(s.tables)
 }
 
 // replace creates a new scope with the same parent definition
@@ -377,7 +366,6 @@ func (s *scope) replace() *scope {
 		b:      s.b,
 		parent: s.parent,
 		cols:   colPool.Get().([]scopeColumn),
-		tables: tablesPool.Get().(map[string]sql.TableId),
 	}
 }
 
