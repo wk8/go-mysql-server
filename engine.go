@@ -178,9 +178,6 @@ func New(a *analyzer.Analyzer, cfg *Config) *Engine {
 	parser := sql.NewMysqlParser()
 	binderPool := &sync.Pool{
 		New: func() any {
-			// The Pool's New function should generally only return pointer
-			// types, since a pointer can be put into the return interface
-			// value without an allocation:
 			return planbuilder.New(emptyCtx, a.Catalog, parser)
 		},
 	}
