@@ -49,6 +49,7 @@ type Builder struct {
 	insertActive    bool
 	nesting         int
 	parser          sql.Parser
+	cleanup         []*scope
 }
 
 // BindvarContext holds bind variable replacement literals.
@@ -115,6 +116,10 @@ func New(ctx *sql.Context, cat sql.Catalog, p sql.Parser) *Builder {
 	}
 }
 
+func (b *Builder) SetCtx(ctx *sql.Context) {
+	b.ctx = ctx
+}
+
 func (b *Builder) SetDebug(val bool) {
 	b.f.debug = val
 }
@@ -160,6 +165,11 @@ func (b *Builder) newScope() *scope {
 }
 
 func (b *Builder) Reset() {
+	for _, s := range b.cleanup {
+		go s.close()
+	}
+	b.cleanup = b.cleanup[:0]
+	b.ctx = nil
 	b.colId = 0
 	b.tabId = 0
 	b.bindCtx = nil

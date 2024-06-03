@@ -147,6 +147,7 @@ type Engine struct {
 	Version           sql.AnalyzerVersion
 	EventScheduler    *eventscheduler.EventScheduler
 	Parser            sql.Parser
+	BinderPool        *sync.Pool
 }
 
 type ColumnWithRawDefault struct {
@@ -174,7 +175,15 @@ func New(a *analyzer.Analyzer, cfg *Config) *Engine {
 		Fn:   function.NewVersion(cfg.VersionPostfix),
 	})
 	a.Catalog.RegisterFunction(emptyCtx, function.GetLockingFuncs(ls)...)
-
+	parser := sql.NewMysqlParser()
+	binderPool := &sync.Pool{
+		New: func() any {
+			// The Pool's New function should generally only return pointer
+			// types, since a pointer can be put into the return interface
+			// value without an allocation:
+			return planbuilder.New(emptyCtx, a.Catalog, parser)
+		},
+	}
 	ret := &Engine{
 		Analyzer:          a,
 		MemoryManager:     sql.NewMemoryManager(sql.ProcessMemory),
@@ -185,7 +194,8 @@ func New(a *analyzer.Analyzer, cfg *Config) *Engine {
 		PreparedDataCache: NewPreparedDataCache(),
 		mu:                &sync.Mutex{},
 		EventScheduler:    nil,
-		Parser:            sql.NewMysqlParser(),
+		Parser:            parser,
+		BinderPool:        binderPool,
 	}
 	ret.ReadOnly.Store(cfg.IsReadOnly)
 	return ret
@@ -197,12 +207,26 @@ func NewDefault(pro sql.DatabaseProvider) *Engine {
 	return New(a, nil)
 }
 
+func (e *Engine) GetBinder(ctx *sql.Context) *planbuilder.Builder {
+	binder := e.BinderPool.Get().(*planbuilder.Builder)
+	binder.SetCtx(ctx)
+	sqlMode := sql.LoadSqlMode(ctx)
+	binder.SetParserOptions(sqlMode.ParserOptions())
+	return binder
+}
+
+func (e *Engine) PutBinder(binder *planbuilder.Builder) {
+	binder.Reset()
+	e.BinderPool.Put(binder)
+}
+
 // AnalyzeQuery analyzes a query and returns its sql.Node
 func (e *Engine) AnalyzeQuery(
 	ctx *sql.Context,
 	query string,
 ) (sql.Node, error) {
-	binder := planbuilder.New(ctx, e.Analyzer.Catalog, e.Parser)
+	binder := e.GetBinder(ctx)
+	defer e.PutBinder(binder)
 	parsed, _, _, err := binder.Parse(query, false)
 	if err != nil {
 		return nil, err
@@ -230,7 +254,8 @@ func (e *Engine) PrepareParsedQuery(
 	statementKey, query string,
 	stmt sqlparser.Statement,
 ) (sql.Node, error) {
-	binder := planbuilder.New(ctx, e.Analyzer.Catalog, e.Parser)
+	binder := e.GetBinder(ctx)
+	defer e.PutBinder(binder)
 	node, err := binder.BindOnly(stmt, query)
 
 	if err != nil {
@@ -364,6 +389,7 @@ func (e *Engine) QueryWithBindings(ctx *sql.Context, query string, parsed sqlpar
 	query = sql.RemoveSpaceAndDelimiter(query, ';')
 
 	parsed, binder, err := e.preparedStatement(ctx, query, parsed, bindings)
+	defer e.PutBinder(binder)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -461,8 +487,9 @@ func (e *Engine) BoundQueryPlan(ctx *sql.Context, query string, parsed sqlparser
 
 	query = sql.RemoveSpaceAndDelimiter(query, ';')
 
-	binder := planbuilder.New(ctx, e.Analyzer.Catalog, e.Parser)
+	binder := e.GetBinder(ctx)
 	binder.SetBindings(bindings)
+	defer e.PutBinder(binder)
 
 	// Begin a transaction if necessary (no-op if one is in flight)
 	err := e.beginTransaction(ctx)
@@ -515,7 +542,7 @@ func (e *Engine) preparedStatement(ctx *sql.Context, query string, parsed sqlpar
 		preparedAst, preparedDataFound = e.PreparedDataCache.GetCachedStmt(ctx.Session.ID(), query)
 	}
 
-	binder := planbuilder.New(ctx, e.Analyzer.Catalog, e.Parser)
+	binder := e.GetBinder(ctx)
 	if preparedDataFound {
 		parsed = preparedAst
 		binder.SetBindings(bindings)

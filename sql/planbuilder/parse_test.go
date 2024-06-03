@@ -2479,7 +2479,6 @@ Project
 
 	ctx := sql.NewContext(context.Background(), sql.WithSession(sess))
 	ctx.SetCurrentDatabase("mydb")
-	b := New(ctx, cat, sql.NewMysqlParser())
 
 	for _, tt := range tests {
 		t.Run(tt.Query, func(t *testing.T) {
@@ -2499,8 +2498,8 @@ Project
 			stmt, err := sqlparser.Parse(tt.Query)
 			require.NoError(t, err)
 
+			b := New(ctx, cat, sql.NewMysqlParser())
 			outScope := b.build(nil, stmt, tt.Query)
-			defer b.Reset()
 			plan := sql.DebugString(outScope.node)
 
 			if rewrite {
@@ -2837,7 +2836,6 @@ func TestPlanBuilderErr(t *testing.T) {
 
 	ctx := sql.NewContext(context.Background(), sql.WithSession(sess))
 	ctx.SetCurrentDatabase("mydb")
-	b := New(ctx, cat, sql.NewMysqlParser())
 
 	for _, tt := range tests {
 		t.Run(tt.Query, func(t *testing.T) {
@@ -2847,8 +2845,8 @@ func TestPlanBuilderErr(t *testing.T) {
 			stmt, err := sqlparser.Parse(tt.Query)
 			require.NoError(t, err)
 
+			b := New(ctx, cat, sql.NewMysqlParser())
 			_, err = b.BindOnly(stmt, tt.Query)
-			defer b.Reset()
 
 			require.Error(t, err)
 			require.Equal(t, tt.Err, err.Error())

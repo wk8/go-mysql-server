@@ -17,6 +17,7 @@ package planbuilder
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	ast "github.com/dolthub/vitess/go/vt/sqlparser"
 
@@ -25,6 +26,21 @@ import (
 	"github.com/dolthub/go-mysql-server/sql/plan"
 	"github.com/dolthub/go-mysql-server/sql/transform"
 )
+
+var colPool = sync.Pool{
+	New: func() any {
+		// The Pool's New function should generally only return pointer
+		// types, since a pointer can be put into the return interface
+		// value without an allocation:
+		return make([]scopeColumn, 0)
+	},
+}
+
+var tablesPool = sync.Pool{
+	New: func() any {
+		return make(map[string]sql.TableId, 0)
+	},
+}
 
 // scope tracks relational dependencies necessary to type check expressions,
 // resolve name definitions, and build relational nodes.
@@ -331,11 +347,23 @@ func (s *scope) push() *scope {
 	new := &scope{
 		b:      s.b,
 		parent: s,
+		cols:   colPool.Get().([]scopeColumn),
+		tables: tablesPool.Get().(map[string]sql.TableId),
 	}
+	s.b.cleanup = append(s.b.cleanup, new)
 	if s.procActive() {
 		new.initProc()
 	}
 	return new
+}
+
+func (s *scope) close() {
+	s.cols = s.cols[:0]
+	colPool.Put(s.cols)
+	for k := range s.tables {
+		delete(s.tables, k)
+	}
+	tablesPool.Put(s.tables)
 }
 
 // replace creates a new scope with the same parent definition
@@ -348,6 +376,8 @@ func (s *scope) replace() *scope {
 	return &scope{
 		b:      s.b,
 		parent: s.parent,
+		cols:   colPool.Get().([]scopeColumn),
+		tables: tablesPool.Get().(map[string]sql.TableId),
 	}
 }
 

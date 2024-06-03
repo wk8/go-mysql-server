@@ -176,6 +176,7 @@ func applyTriggers(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope,
 		for _, trigger := range triggers {
 			var parsedTrigger sql.Node
 			sqlMode := sql.NewSqlModeFromString(trigger.SqlMode)
+			b.SetCtx(ctx)
 			b.SetParserOptions(sqlMode.ParserOptions())
 			parsedTrigger, _, _, err = b.Parse(trigger.CreateStatement, false)
 			b.Reset()
@@ -198,6 +199,8 @@ func applyTriggers(ctx *sql.Context, a *Analyzer, n sql.Node, scope *plan.Scope,
 				// first pass allows unresolved before we know whether trigger is relevant
 				// TODO store destination table name with trigger, so we don't have to do parse twice
 				b.TriggerCtx().Call = true
+				b.SetCtx(ctx)
+				b.SetParserOptions(sqlMode.ParserOptions())
 				parsedTrigger, _, _, err = b.Parse(trigger.CreateStatement, false)
 				b.TriggerCtx().Call = false
 				b.Reset()
