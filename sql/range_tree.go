@@ -18,6 +18,7 @@ package sql
 // Referenced https://en.wikipedia.org/wiki/Interval_tree#Augmented_tree
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
@@ -136,7 +137,7 @@ func NewRangeColumnExprTree(initialRange Range, columnExprTypes []Type) (*RangeC
 }
 
 // FindConnections returns all connecting Ranges found in the tree. They may or may not be mergeable or overlap.
-func (tree *RangeColumnExprTree) FindConnections(rang Range, colExprIdx int) (RangeCollection, error) {
+func (tree *RangeColumnExprTree) FindConnections(ctx context.Context, rang Range, colExprIdx int) (RangeCollection, error) {
 	// Some potential optimizations that may significantly reduce the number of comparisons in a worst-case scenario:
 	// 1) Rewrite this function to return a single Range that is guaranteed to either merge or overlap, rather than
 	//    a slice of ranges that are all connected (either overlapping or adjacent) but may not be mergeable.
@@ -152,11 +153,11 @@ func (tree *RangeColumnExprTree) FindConnections(rang Range, colExprIdx int) (Ra
 	for len(stack) > 0 {
 		node := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
-		cmp1, err := colExpr.LowerBound.Compare(node.UpperBound, tree.typ)
+		cmp1, err := colExpr.LowerBound.Compare(ctx, node.UpperBound, tree.typ)
 		if err != nil {
 			return nil, err
 		}
-		cmp2, err := node.LowerBound.Compare(colExpr.UpperBound, tree.typ)
+		cmp2, err := node.LowerBound.Compare(ctx, colExpr.UpperBound, tree.typ)
 		if err != nil {
 			return nil, err
 		}
@@ -173,7 +174,7 @@ func (tree *RangeColumnExprTree) FindConnections(rang Range, colExprIdx int) (Ra
 			}
 			if node.Inner == nil {
 				rangeCollection = append(rangeCollection, Range{connectedColExpr})
-			} else if connectedRanges, err := node.Inner.FindConnections(rang, colExprIdx+1); err != nil {
+			} else if connectedRanges, err := node.Inner.FindConnections(ctx, rang, colExprIdx+1); err != nil {
 				return nil, err
 			} else if connectedRanges != nil {
 				for _, connectedRange := range connectedRanges {
@@ -188,7 +189,7 @@ func (tree *RangeColumnExprTree) FindConnections(rang Range, colExprIdx int) (Ra
 		}
 		// If the left child's max upperbound is greater than the search column's lowerbound, we need to search the left subtree
 		if node.Left != nil {
-			cmp, err := colExpr.LowerBound.Compare(node.Left.MaxUpperbound, tree.typ)
+			cmp, err := colExpr.LowerBound.Compare(ctx, node.Left.MaxUpperbound, tree.typ)
 			if err != nil {
 				return nil, err
 			}
@@ -201,12 +202,12 @@ func (tree *RangeColumnExprTree) FindConnections(rang Range, colExprIdx int) (Ra
 }
 
 // Insert adds the given Range into the tree.
-func (tree *RangeColumnExprTree) Insert(rang Range) error {
-	return tree.insert(rang, 0)
+func (tree *RangeColumnExprTree) Insert(ctx context.Context, rang Range) error {
+	return tree.insert(ctx, rang, 0)
 }
 
 // insert is the internal implementation of Insert.
-func (tree *RangeColumnExprTree) insert(rang Range, colExprIdx int) error {
+func (tree *RangeColumnExprTree) insert(ctx context.Context, rang Range, colExprIdx int) error {
 	colExpr := rang[colExprIdx]
 	var insertedNode *rangeColumnExprTreeNode
 	var inner *RangeColumnExprTree
@@ -233,18 +234,18 @@ func (tree *RangeColumnExprTree) insert(rang Range, colExprIdx int) error {
 		node := tree.root
 		loop := true
 		for loop {
-			cmp, err := colExpr.LowerBound.Compare(node.LowerBound, tree.typ)
+			cmp, err := colExpr.LowerBound.Compare(ctx, node.LowerBound, tree.typ)
 			if err != nil {
 				return err
 			}
 			if cmp == 0 {
-				cmp, err = colExpr.UpperBound.Compare(node.UpperBound, tree.typ)
+				cmp, err = colExpr.UpperBound.Compare(ctx, node.UpperBound, tree.typ)
 				if err != nil {
 					return err
 				}
 			}
 			if cmp < 0 {
-				node.MaxUpperbound, err = GetRangeCutMax(colExpr.Typ, node.MaxUpperbound, colExpr.UpperBound)
+				node.MaxUpperbound, err = GetRangeCutMax(ctx, colExpr.Typ, node.MaxUpperbound, colExpr.UpperBound)
 				if err != nil {
 					return err
 				}
@@ -272,7 +273,7 @@ func (tree *RangeColumnExprTree) insert(rang Range, colExprIdx int) error {
 					node = node.Left
 				}
 			} else if cmp > 0 {
-				node.MaxUpperbound, err = GetRangeCutMax(colExpr.Typ, node.MaxUpperbound, colExpr.UpperBound)
+				node.MaxUpperbound, err = GetRangeCutMax(ctx, colExpr.Typ, node.MaxUpperbound, colExpr.UpperBound)
 				if err != nil {
 					return err
 				}
@@ -304,7 +305,7 @@ func (tree *RangeColumnExprTree) insert(rang Range, colExprIdx int) error {
 				}
 			} else /* cmp == 0 */ {
 				if node.Inner != nil {
-					return node.Inner.insert(rang, colExprIdx+1)
+					return node.Inner.insert(ctx, rang, colExprIdx+1)
 				}
 				return nil
 			}
@@ -317,20 +318,20 @@ func (tree *RangeColumnExprTree) insert(rang Range, colExprIdx int) error {
 }
 
 // Remove removes the given Range from the tree (and subtrees if applicable).
-func (tree *RangeColumnExprTree) Remove(rang Range) error {
-	return tree.remove(rang, 0)
+func (tree *RangeColumnExprTree) Remove(ctx context.Context, rang Range) error {
+	return tree.remove(ctx, rang, 0)
 }
 
 // remove is the internal implementation of Remove.
-func (tree *RangeColumnExprTree) remove(rang Range, colExprIdx int) error {
+func (tree *RangeColumnExprTree) remove(ctx context.Context, rang Range, colExprIdx int) error {
 	colExpr := rang[colExprIdx]
 	var child *rangeColumnExprTreeNode
-	node, err := tree.getNode(colExpr)
+	node, err := tree.getNode(ctx, colExpr)
 	if err != nil || node == nil {
 		return err
 	}
 	if node.Inner != nil {
-		err = node.Inner.remove(rang, colExprIdx+1)
+		err = node.Inner.remove(ctx, rang, colExprIdx+1)
 		if err != nil {
 			return err
 		}
@@ -388,14 +389,14 @@ func (tree *RangeColumnExprTree) remove(rang Range, colExprIdx int) error {
 }
 
 // GetRangeCollection returns every Range that this tree contains.
-func (tree *RangeColumnExprTree) GetRangeCollection() (RangeCollection, error) {
+func (tree *RangeColumnExprTree) GetRangeCollection(ctx context.Context) (RangeCollection, error) {
 	var rangeCollection RangeCollection
 	var emptyRange Range
 	iterStack := []*rangeTreeIter{tree.Iterator()}
 	rangeStack := Range{RangeColumnExpr{}}
 	for len(iterStack) > 0 {
 		iter := iterStack[len(iterStack)-1]
-		node, err := iter.Next()
+		node, err := iter.Next(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -411,13 +412,13 @@ func (tree *RangeColumnExprTree) GetRangeCollection() (RangeCollection, error) {
 			} else {
 				rang := make(Range, len(rangeStack))
 				copy(rang, rangeStack)
-				isempty, err := rang.IsEmpty()
+				isempty, err := rang.IsEmpty(ctx)
 				if err != nil {
 					return nil, err
 				}
 				if !isempty {
 					if len(rangeCollection) > 0 {
-						merged, ok, err := rangeCollection[len(rangeCollection)-1].TryMerge(rang)
+						merged, ok, err := rangeCollection[len(rangeCollection)-1].TryMerge(ctx, rang)
 						if err != nil {
 							return nil, err
 						}
@@ -504,15 +505,15 @@ func (node *rangeColumnExprTreeNode) string(prefix string, isTail bool, sb *stri
 }
 
 // getNode returns the node that matches the given column expression, if it exists. Returns nil otherwise.
-func (tree *RangeColumnExprTree) getNode(colExpr RangeColumnExpr) (*rangeColumnExprTreeNode, error) {
+func (tree *RangeColumnExprTree) getNode(ctx context.Context, colExpr RangeColumnExpr) (*rangeColumnExprTreeNode, error) {
 	node := tree.root
 	for node != nil {
-		cmp, err := colExpr.LowerBound.Compare(node.LowerBound, tree.typ)
+		cmp, err := colExpr.LowerBound.Compare(ctx, node.LowerBound, tree.typ)
 		if err != nil {
 			return nil, err
 		}
 		if cmp == 0 {
-			cmp, err = colExpr.UpperBound.Compare(node.UpperBound, tree.typ)
+			cmp, err = colExpr.UpperBound.Compare(ctx, node.UpperBound, tree.typ)
 			if err != nil {
 				return nil, err
 			}
@@ -759,7 +760,7 @@ func (tree *RangeColumnExprTree) Iterator() *rangeTreeIter {
 }
 
 // Next returns the next node, or nil if no more nodes are available.
-func (iterator *rangeTreeIter) Next() (*rangeColumnExprTreeNode, error) {
+func (iterator *rangeTreeIter) Next(ctx context.Context) (*rangeColumnExprTreeNode, error) {
 	if iterator.position == end {
 		return nil, nil
 	}
@@ -786,13 +787,13 @@ func (iterator *rangeTreeIter) Next() (*rangeColumnExprTreeNode, error) {
 		node := iterator.node
 		for iterator.node.Parent != nil {
 			iterator.node = iterator.node.Parent
-			if cmp, err := node.LowerBound.Compare(iterator.node.LowerBound, iterator.tree.typ); err != nil {
+			if cmp, err := node.LowerBound.Compare(ctx, iterator.node.LowerBound, iterator.tree.typ); err != nil {
 				return nil, err
 			} else if cmp < 0 {
 				iterator.position = between
 				return iterator.node, nil
 			} else if cmp == 0 {
-				cmp, err = node.UpperBound.Compare(iterator.node.UpperBound, iterator.tree.typ)
+				cmp, err = node.UpperBound.Compare(ctx, iterator.node.UpperBound, iterator.tree.typ)
 				if err != nil {
 					return nil, err
 				}

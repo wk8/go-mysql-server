@@ -125,7 +125,7 @@ func (f *factory) buildConvert(expr sql.Expression, castToType string, typeLengt
 	n := expression.NewConvertWithLengthAndScale(expr, castToType, typeLength, typeScale)
 	{
 		// deduplicate redundant convert
-		if expr.Type().Equals(n.Type()) {
+		if expr.Type().Equals(ctx, n.Type()) {
 			f.log("eliminated convert")
 			return expr, nil
 		}

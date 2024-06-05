@@ -97,12 +97,12 @@ func (j *JSONExtract) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 			return nil, err
 		}
 
-		path, _, err = types.LongText.Convert(path)
+		path, _, err = types.LongText.Convert(ctx, path)
 		if err != nil {
 			return nil, err
 		}
 
-		results[i], err = types.LookupJSONValue(searchable, path.(string))
+		results[i], err = types.LookupJSONValue(ctx, searchable, path.(string))
 		if err != nil {
 			return nil, fmt.Errorf("failed to extract from expression '%s'; %s", j.JSON.String(), err.Error())
 		}

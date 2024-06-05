@@ -417,7 +417,7 @@ func convertToDecimalValue(val interface{}, isTimeType bool) interface{} {
 		if err != nil {
 			val = decimal.Zero
 		}
-		val, _, err = dtyp.Convert(val)
+		val, _, err = dtyp.Convert(ctx, val)
 		if err != nil {
 			val = decimal.Zero
 		}

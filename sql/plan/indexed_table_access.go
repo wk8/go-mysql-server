@@ -567,7 +567,7 @@ func (lb *LookupBuilder) GetLookup(key lookupBuilderKey) (sql.IndexLookup, error
 			if key[i] == nil {
 				lb.rang[i] = sql.NullRangeColumnExpr(lb.cets[i].Type)
 			} else {
-				k, _, err := lb.rang[i].Typ.Convert(key[i])
+				k, _, err := lb.rang[i].Typ.Convert(ctx, key[i])
 				if err != nil {
 					// TODO: throw warning, and this should truncate for strings
 					err = nil
@@ -577,7 +577,7 @@ func (lb *LookupBuilder) GetLookup(key lookupBuilderKey) (sql.IndexLookup, error
 				lb.rang[i].UpperBound = sql.Above{Key: k}
 			}
 		} else {
-			k, _, err := lb.rang[i].Typ.Convert(key[i])
+			k, _, err := lb.rang[i].Typ.Convert(ctx, key[i])
 			if err != nil {
 				// TODO: throw warning, and this should truncate for strings
 				err = nil

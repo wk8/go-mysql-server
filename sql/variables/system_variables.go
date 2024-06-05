@@ -76,7 +76,7 @@ func (sv *globalSystemVariables) AssignValues(vals map[string]interface{}) error
 		if !ok {
 			return sql.ErrUnknownSystemVariable.New(varName)
 		}
-		svv, err := sysVar.InitValue(val, true)
+		svv, err := sysVar.InitValue(ctx, val, true)
 		if err != nil {
 			return err
 		}
@@ -143,7 +143,7 @@ func (sv *globalSystemVariables) SetGlobal(name string, val interface{}) error {
 	if !ok {
 		return sql.ErrUnknownSystemVariable.New(name)
 	}
-	svv, err := sysVar.SetValue(val, true)
+	svv, err := sysVar.SetValue(ctx, val, true)
 	if err != nil {
 		return err
 	}
@@ -785,7 +785,7 @@ var systemVars = map[string]sql.SystemVariable{
 		Type:              types.NewSystemEnumType("event_scheduler", "ON", "OFF", "DISABLED"),
 		Default:           "ON",
 		NotifyChanged: func(_ sql.SystemVariableScope, value sql.SystemVarValue) error {
-			convertedVal, _, err := value.Var.GetType().Convert(value.Val)
+			convertedVal, _, err := value.Var.GetType().Convert(ctx, value.Val)
 			if err == nil {
 				// TODO: need to update EventScheduler state at runtime if applicable
 				s := strings.ToLower(convertedVal.(string))

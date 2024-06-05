@@ -209,13 +209,13 @@ func (s *Statistic) IndexClass() sql.IndexClass {
 	return sql.IndexClass(s.IdxClass)
 }
 
-func (s *Statistic) ToInterface() (interface{}, error) {
+func (s *Statistic) ToInterface(interface{}) (interface{}, error) {
 	typs := make([]string, len(s.Typs))
 	for i, t := range s.Typs {
 		typs[i] = t.String()
 	}
 
-	buckets, err := s.Histogram().ToInterface()
+	buckets, err := s.Histogram().ToInterface(ctx)
 	if err != nil {
 		return nil, err
 	}

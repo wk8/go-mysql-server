@@ -84,7 +84,7 @@ func (g *globalStatusVariables) SetGlobal(name string, val interface{}) error {
 	//       non-uint64 status variables. This should really use the type of the status variable as
 	//       type to convert to, but because those are systemInt without the correct bounds configured,
 	//       that conversion will fail with an out of bounds error.
-	convVal, _, err := types.Uint64.Convert(val)
+	convVal, _, err := types.Uint64.Convert(nil, val)
 	if err != nil {
 		return err
 	}

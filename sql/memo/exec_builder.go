@@ -259,7 +259,7 @@ func (b *ExecBuilder) buildIndexScan(i *IndexScan, children ...sql.Node) (sql.No
 
 func checkIndexTypeMismatch(idx sql.Index, rang sql.Range) bool {
 	for i, typ := range idx.ColumnExpressionTypes() {
-		if !types.Null.Equals(rang[i].Typ) && !typ.Type.Equals(rang[i].Typ) {
+		if !types.Null.Equals(ctx, rang[i].Typ) && !typ.Type.Equals(ctx, rang[i].Typ) {
 			return true
 		}
 	}

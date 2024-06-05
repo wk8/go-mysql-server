@@ -15,6 +15,7 @@
 package types
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -181,7 +182,7 @@ func NumericUnaryValue(t sql.Type) interface{} {
 }
 
 // Compare implements Type interface.
-func (t NumberTypeImpl_) Compare(a interface{}, b interface{}) (int, error) {
+func (t NumberTypeImpl_) Compare(context context.Context, a interface{}, b interface{}) (int, error) {
 	if hasNulls, res := CompareNulls(a, b); hasNulls {
 		return res, nil
 	}
@@ -242,7 +243,7 @@ func (t NumberTypeImpl_) Compare(a interface{}, b interface{}) (int, error) {
 }
 
 // Convert implements Type interface.
-func (t NumberTypeImpl_) Convert(v interface{}) (interface{}, sql.ConvertInRange, error) {
+func (t NumberTypeImpl_) Convert(ctx context.Context, v interface{}) (interface{}, sql.ConvertInRange, error) {
 	var err error
 	if v == nil {
 		return nil, sql.InRange, nil
@@ -253,7 +254,7 @@ func (t NumberTypeImpl_) Convert(v interface{}) (interface{}, sql.ConvertInRange
 	}
 
 	if jv, ok := v.(sql.JSONWrapper); ok {
-		v, err = jv.ToInterface()
+		v, err = jv.ToInterface(ctx)
 		if err != nil {
 			return nil, sql.OutOfRange, err
 		}
@@ -378,17 +379,8 @@ func (t NumberTypeImpl_) MaxTextResponseByteLength(*sql.Context) uint32 {
 	}
 }
 
-// MustConvert implements the Type interface.
-func (t NumberTypeImpl_) MustConvert(v interface{}) interface{} {
-	value, _, err := t.Convert(v)
-	if err != nil {
-		panic(err)
-	}
-	return value
-}
-
 // Equals implements the Type interface.
-func (t NumberTypeImpl_) Equals(otherType sql.Type) bool {
+func (t NumberTypeImpl_) Equals(ctx context.Context, otherType sql.Type) bool {
 	return t.baseType == otherType.Type()
 }
 
@@ -413,7 +405,7 @@ func (t NumberTypeImpl_) SQL(ctx *sql.Context, dest []byte, v interface{}) (sqlt
 	}
 
 	stop := len(dest)
-	if vt, _, err := t.Convert(v); err == nil {
+	if vt, _, err := t.Convert(ctx, v); err == nil {
 		switch t.baseType {
 		case sqltypes.Int8, sqltypes.Int16, sqltypes.Int24, sqltypes.Int32, sqltypes.Int64:
 			dest = strconv.AppendInt(dest, mustInt64(vt), 10)

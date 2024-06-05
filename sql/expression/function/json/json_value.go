@@ -95,7 +95,7 @@ func (j *JsonValue) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 	}
 
 	// json NULLs also result in sql NULLs.
-	cmp, err := types.CompareJSON(js, types.JSONDocument{Val: nil})
+	cmp, err := types.CompareJSON(ctx, js, types.JSONDocument{Val: nil})
 	if cmp == 0 {
 		return nil, nil
 	}
@@ -111,7 +111,7 @@ func (j *JsonValue) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 	}
 
 	var res interface{}
-	res, err = types.LookupJSONValue(searchable, path.(string))
+	res, err = types.LookupJSONValue(ctx, searchable, path.(string))
 	if err != nil || res == nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (j *JsonValue) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 	// bad lookups on arrays, instead of an error. Note that this will cause lookups that expect [] to return incorrect
 	// results.
 	// See https://github.com/dolthub/dolt/issues/7905 for more information.
-	cmp, err = types.CompareJSON(res, types.JSONDocument{Val: []interface{}{}})
+	cmp, err = types.CompareJSON(ctx, res, types.JSONDocument{Val: []interface{}{}})
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +129,7 @@ func (j *JsonValue) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 	}
 
 	if j.Typ != nil {
-		res, _, err = j.Typ.Convert(res)
+		res, _, err = j.Typ.Convert(ctx, res)
 		if err != nil {
 			return nil, err
 		}
@@ -176,7 +176,7 @@ func GetJSONFromWrapperOrCoercibleString(js interface{}, functionName string, ar
 	// The first parameter can be either JSON or a string.
 	switch jsType := js.(type) {
 	case string:
-		strData, _, err := types.LongBlob.Convert(js)
+		strData, _, err := types.LongBlob.Convert(ctx, js)
 		if err != nil {
 			return nil, err
 		}
@@ -185,7 +185,7 @@ func GetJSONFromWrapperOrCoercibleString(js interface{}, functionName string, ar
 		}
 		return jsonData, nil
 	case sql.JSONWrapper:
-		return jsType.ToInterface()
+		return jsType.ToInterface(ctx)
 	default:
 		return nil, sql.ErrInvalidJSONArgument.New(argumentPosition, functionName)
 	}

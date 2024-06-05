@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"time"
@@ -69,14 +70,14 @@ type Type interface {
 	CollationCoercible
 	// Compare returns an integer comparing two values.
 	// The result will be 0 if a==b, -1 if a < b, and +1 if a > b.
-	Compare(interface{}, interface{}) (int, error)
+	Compare(context.Context, interface{}, interface{}) (int, error)
 	// Convert a value of a compatible type to a most accurate type, returning
 	// the new value, whether the value in range, or an error. If |inRange| is
 	// false, the value was coerced according to MySQL's rules.
-	Convert(interface{}) (interface{}, ConvertInRange, error)
+	Convert(context.Context, interface{}) (interface{}, ConvertInRange, error)
 	// Equals returns whether the given type is equivalent to the calling type. All parameters are included in the
 	// comparison, so ENUM("a", "b") is not equivalent to ENUM("a", "b", "c").
-	Equals(otherType Type) bool
+	Equals(ctx context.Context, otherType Type) bool
 	// MaxTextResponseByteLength returns the maximum number of bytes needed to serialize an instance of this type
 	// as a string in a response over the wire for MySQL's text protocol – in other words, this is the maximum bytes
 	// needed to serialize any value of this type as human-readable text, NOT in a more compact, binary representation.

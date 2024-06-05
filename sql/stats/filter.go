@@ -14,6 +14,7 @@
 package stats
 
 import (
+	"context"
 	"sort"
 
 	"github.com/dolthub/go-mysql-server/sql"
@@ -28,7 +29,7 @@ func Union(b1, b2 []sql.HistogramBucket, types []sql.Type) ([]sql.HistogramBucke
 		key2 := b2[j].UpperBound()
 		for k := range key1 {
 			t := types[k]
-			cmp, err := nilSafeCmp(t, key1[k], key2[k])
+			cmp, err := nilSafeCmp(ctx, t, key1[k], key2[k])
 			if err != nil {
 				return nil, err
 			}
@@ -74,7 +75,7 @@ func Intersect(b1, b2 []sql.HistogramBucket, types []sql.Type) ([]sql.HistogramB
 		key2 := b2[j].UpperBound()
 		for k := range key1 {
 			t := types[k]
-			cmp, err := nilSafeCmp(t, key1[k], key2[k])
+			cmp, err := nilSafeCmp(ctx, t, key1[k], key2[k])
 			if err != nil {
 				return nil, err
 			}
@@ -118,7 +119,7 @@ func PrefixKey(buckets []sql.HistogramBucket, idxCols sql.ColSet, types []sql.Ty
 		bucketKey := buckets[i].UpperBound()
 		for i, _ := range key {
 			t := types[i]
-			cmp, err := nilSafeCmp(t, bucketKey[i], key[i])
+			cmp, err := nilSafeCmp(ctx, t, bucketKey[i], key[i])
 			if err != nil {
 				searchErr = err
 			}
@@ -157,7 +158,7 @@ func PrefixKey(buckets []sql.HistogramBucket, idxCols sql.ColSet, types []sql.Ty
 	return ret, newFds, nil
 }
 
-func nilSafeCmp(typ sql.Type, left, right interface{}) (int, error) {
+func nilSafeCmp(ctx context.Context, typ sql.Type, left, right interface{}) (int, error) {
 	if left == nil && right == nil {
 		return 0, nil
 	} else if left == nil && right != nil {
@@ -165,7 +166,7 @@ func nilSafeCmp(typ sql.Type, left, right interface{}) (int, error) {
 	} else if left != nil && right == nil {
 		return 1, nil
 	} else {
-		return typ.Compare(left, right)
+		return typ.Compare(ctx, left, right)
 	}
 }
 
@@ -200,7 +201,7 @@ func UpdateCounts(statistic sql.Statistic) sql.Statistic {
 func keysEqual(types []sql.Type, left, right []interface{}) (bool, error) {
 	for i, _ := range right {
 		t := types[i]
-		cmp, err := t.Compare(left[i], right[i])
+		cmp, err := t.Compare(ctx, left[i], right[i])
 		if err != nil {
 			return false, err
 		}
@@ -214,7 +215,7 @@ func keysEqual(types []sql.Type, left, right []interface{}) (bool, error) {
 func PrefixLt(buckets []sql.HistogramBucket, types []sql.Type, val interface{}) ([]sql.HistogramBucket, error) {
 	// first bucket whose upper bound is greater than val
 	idx, err := PrefixLtHist(buckets, sql.Row{val}, func(i, j sql.Row) (int, error) {
-		return nilSafeCmp(types[0], i[0], j[0])
+		return nilSafeCmp(ctx, types[0], i[0], j[0])
 	})
 	if err != nil {
 		return nil, err
@@ -226,7 +227,7 @@ func PrefixLt(buckets []sql.HistogramBucket, types []sql.Type, val interface{}) 
 
 func PrefixGt(buckets []sql.HistogramBucket, types []sql.Type, val interface{}) ([]sql.HistogramBucket, error) {
 	idx, err := PrefixGtHist(buckets, sql.Row{val}, func(i, j sql.Row) (int, error) {
-		return nilSafeCmp(types[0], i[0], j[0])
+		return nilSafeCmp(ctx, types[0], i[0], j[0])
 	})
 	if err != nil {
 		return nil, err
@@ -242,7 +243,7 @@ func PrefixGt(buckets []sql.HistogramBucket, types []sql.Type, val interface{}) 
 func PrefixLte(buckets []sql.HistogramBucket, types []sql.Type, val interface{}) ([]sql.HistogramBucket, error) {
 	// first bucket whose upper bound is greater than val
 	idx, err := PrefixLteHist(buckets, sql.Row{val}, func(i, j sql.Row) (int, error) {
-		return nilSafeCmp(types[0], i[0], j[0])
+		return nilSafeCmp(ctx, types[0], i[0], j[0])
 	})
 	if err != nil {
 		return nil, err
@@ -311,7 +312,7 @@ func PrefixGteHist(h []sql.HistogramBucket, target sql.Row, cmp func(sql.Row, sq
 
 func PrefixGte(buckets []sql.HistogramBucket, types []sql.Type, val interface{}) ([]sql.HistogramBucket, error) {
 	idx, err := PrefixGteHist(buckets, sql.Row{val}, func(i, j sql.Row) (int, error) {
-		return nilSafeCmp(types[0], i[0], j[0])
+		return nilSafeCmp(ctx, types[0], i[0], j[0])
 	})
 	if err != nil {
 		return nil, err

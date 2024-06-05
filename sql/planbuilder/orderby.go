@@ -78,7 +78,7 @@ func (b *Builder) analyzeOrderBy(fromScope, projScope *scope, order ast.OrderBy)
 			expr := b.normalizeValArg(e)
 			if val, ok := expr.(*ast.SQLVal); ok && val.Type == ast.IntVal {
 				lit := b.convertInt(string(val.Val), 10)
-				idx, _, err := types.Int64.Convert(lit.Value())
+				idx, _, err := types.Int64.Convert(ctx, lit.Value())
 				if err != nil {
 					b.handleErr(err)
 				}

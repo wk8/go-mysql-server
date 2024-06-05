@@ -15,13 +15,14 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 )
 
 // RangeCut represents a position on the line of all possible values.
 type RangeCut interface {
 	// Compare returns an integer stating the relative position of the calling RangeCut to the given RangeCut.
-	Compare(RangeCut, Type) (int, error)
+	Compare(context.Context, RangeCut, Type) (int, error)
 	// String returns the RangeCut as a string for display purposes.
 	String() string
 	// TypeAsLowerBound returns the bound type if the calling RangeCut is the lower bound of a range.
@@ -69,7 +70,7 @@ func RangeCutIsBinding(c RangeCut) bool {
 }
 
 // GetRangeCutMax returns the RangeCut with the highest value.
-func GetRangeCutMax(typ Type, cuts ...RangeCut) (RangeCut, error) {
+func GetRangeCutMax(ctx context.Context, typ Type, cuts ...RangeCut) (RangeCut, error) {
 	i := 0
 	var maxCut RangeCut
 	for ; i < len(cuts); i++ {
@@ -83,7 +84,7 @@ func GetRangeCutMax(typ Type, cuts ...RangeCut) (RangeCut, error) {
 		if cuts[i] == nil {
 			continue
 		}
-		comp, err := maxCut.Compare(cuts[i], typ)
+		comp, err := maxCut.Compare(ctx, cuts[i], typ)
 		if err != nil {
 			return maxCut, err
 		}
@@ -95,7 +96,7 @@ func GetRangeCutMax(typ Type, cuts ...RangeCut) (RangeCut, error) {
 }
 
 // GetRangeCutMin returns the RangeCut with the lowest value.
-func GetRangeCutMin(typ Type, cuts ...RangeCut) (RangeCut, error) {
+func GetRangeCutMin(ctx context.Context, typ Type, cuts ...RangeCut) (RangeCut, error) {
 	i := 0
 	var minCut RangeCut
 	for ; i < len(cuts); i++ {
@@ -109,7 +110,7 @@ func GetRangeCutMin(typ Type, cuts ...RangeCut) (RangeCut, error) {
 		if cuts[i] == nil {
 			continue
 		}
-		comp, err := minCut.Compare(cuts[i], typ)
+		comp, err := minCut.Compare(ctx, cuts[i], typ)
 		if err != nil {
 			return minCut, err
 		}
@@ -128,16 +129,16 @@ type Above struct {
 var _ RangeCut = Above{}
 
 // Compare implements RangeCut.
-func (a Above) Compare(c RangeCut, typ Type) (int, error) {
+func (a Above) Compare(ctx context.Context, c RangeCut, typ Type) (int, error) {
 	switch c := c.(type) {
 	case AboveAll:
 		return -1, nil
 	case AboveNull:
 		return 1, nil
 	case Above:
-		return typ.Compare(a.Key, c.Key)
+		return typ.Compare(ctx, a.Key, c.Key)
 	case Below:
-		cmp, err := typ.Compare(a.Key, c.Key)
+		cmp, err := typ.Compare(ctx, a.Key, c.Key)
 		if err != nil {
 			return 0, err
 		}
@@ -173,7 +174,7 @@ type AboveAll struct{}
 var _ RangeCut = AboveAll{}
 
 // Compare implements RangeCut.
-func (AboveAll) Compare(c RangeCut, typ Type) (int, error) {
+func (AboveAll) Compare(ctx context.Context, c RangeCut, typ Type) (int, error) {
 	if _, ok := c.(AboveAll); ok {
 		return 0, nil
 	}
@@ -203,16 +204,16 @@ type Below struct {
 var _ RangeCut = Below{}
 
 // Compare implements RangeCut.
-func (b Below) Compare(c RangeCut, typ Type) (int, error) {
+func (b Below) Compare(ctx context.Context, c RangeCut, typ Type) (int, error) {
 	switch c := c.(type) {
 	case AboveAll:
 		return -1, nil
 	case AboveNull:
 		return 1, nil
 	case Below:
-		return typ.Compare(b.Key, c.Key)
+		return typ.Compare(ctx, b.Key, c.Key)
 	case Above:
-		cmp, err := typ.Compare(c.Key, b.Key)
+		cmp, err := typ.Compare(ctx, c.Key, b.Key)
 		if err != nil {
 			return 0, err
 		}
@@ -248,7 +249,7 @@ type AboveNull struct{}
 var _ RangeCut = AboveNull{}
 
 // Compare implements RangeCut.
-func (AboveNull) Compare(c RangeCut, typ Type) (int, error) {
+func (AboveNull) Compare(ctx context.Context, c RangeCut, typ Type) (int, error) {
 	if _, ok := c.(AboveNull); ok {
 		return 0, nil
 	}
@@ -280,7 +281,7 @@ type BelowNull struct{}
 var _ RangeCut = BelowNull{}
 
 // Compare implements RangeCut.
-func (BelowNull) Compare(c RangeCut, typ Type) (int, error) {
+func (BelowNull) Compare(ctx context.Context, c RangeCut, typ Type) (int, error) {
 	// BelowNull overlaps with itself
 	if _, ok := c.(BelowNull); ok {
 		return 0, nil

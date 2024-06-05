@@ -386,12 +386,12 @@ func (c *jsonTableCol) Next(obj interface{}, pass bool, ord int) (sql.Row, error
 		val = c.opts.defEmpVal
 	}
 
-	val, _, err = c.opts.typ.Convert(val)
+	val, _, err = c.opts.typ.Convert(ctx, val)
 	if err != nil {
 		if c.opts.errOnErr {
 			return nil, err
 		}
-		val, _, err = c.opts.typ.Convert(c.opts.defErrVal)
+		val, _, err = c.opts.typ.Convert(ctx, c.opts.defErrVal)
 		if err != nil {
 			return nil, err
 		}
@@ -484,7 +484,7 @@ func (di *orderedDistinctIter) Next(ctx *sql.Context) (sql.Row, error) {
 		}
 
 		if di.prevRow != nil {
-			ok, err := di.prevRow.Equals(row, di.schema)
+			ok, err := di.prevRow.Equals(ctx, row, di.schema)
 			if err != nil {
 				return nil, err
 			}

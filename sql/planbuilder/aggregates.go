@@ -126,7 +126,7 @@ func (b *Builder) buildGroupingCols(fromScope, projScope *scope, groupby ast.Gro
 			}
 			if val.Type == ast.IntVal {
 				lit := b.convertInt(string(val.Val), 10)
-				idx, _, err := types.Int64.Convert(lit.Value())
+				idx, _, err := types.Int64.Convert(ctx, lit.Value())
 				if err != nil {
 					b.handleErr(err)
 				}

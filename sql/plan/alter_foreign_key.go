@@ -644,7 +644,7 @@ func FindFKIndexWithPrefix(ctx *sql.Context, tbl sql.IndexAddressableTable, pref
 // foreignKeyComparableTypes returns whether the two given types are able to be used as parent/child columns in a
 // foreign key.
 func foreignKeyComparableTypes(ctx *sql.Context, type1 sql.Type, type2 sql.Type) bool {
-	if !type1.Equals(type2) {
+	if !type1.Equals(ctx, type2) {
 		// There seems to be a special case where CHAR/VARCHAR/BINARY/VARBINARY can have unequal lengths.
 		// Have not tested every type nor combination, but this seems specific to those 4 types.
 		if type1.Type() == type2.Type() {

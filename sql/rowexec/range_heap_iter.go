@@ -300,7 +300,7 @@ func compareNullsFirst(comparisonType sql.Type, a, b interface{}) (int, error) {
 	if b == nil {
 		return 1, nil
 	}
-	return comparisonType.Compare(a, b)
+	return comparisonType.Compare(ctx, a, b)
 }
 
 func (iter rangeHeapJoinIter) Len() int { return len(iter.activeRanges) }

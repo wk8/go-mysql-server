@@ -129,7 +129,7 @@ func (d *DateAdd) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 		return nil, nil
 	}
 
-	date, _, err = types.DatetimeMaxPrecision.Convert(date)
+	date, _, err = types.DatetimeMaxPrecision.Convert(ctx, date)
 	if err != nil {
 		ctx.Warn(1292, err.Error())
 		return nil, nil
@@ -141,7 +141,7 @@ func (d *DateAdd) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 	if types.IsText(resType) {
 		return res, nil
 	}
-	ret, _, err := resType.Convert(res)
+	ret, _, err := resType.Convert(ctx, res)
 	return ret, err
 }
 
@@ -253,7 +253,7 @@ func (d *DateSub) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 		return nil, nil
 	}
 
-	date, _, err = types.DatetimeMaxPrecision.Convert(date)
+	date, _, err = types.DatetimeMaxPrecision.Convert(ctx, date)
 	if err != nil {
 		ctx.Warn(1292, err.Error())
 		return nil, nil
@@ -265,7 +265,7 @@ func (d *DateSub) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 	if types.IsText(resType) {
 		return res, nil
 	}
-	ret, _, err := resType.Convert(res)
+	ret, _, err := resType.Convert(ctx, res)
 	return ret, err
 }
 
@@ -317,7 +317,7 @@ func (t *TimestampConversion) Eval(ctx *sql.Context, r sql.Row) (interface{}, er
 	if err != nil {
 		return nil, err
 	}
-	ret, _, err := types.TimestampMaxPrecision.Convert(e)
+	ret, _, err := types.TimestampMaxPrecision.Convert(ctx, e)
 	return ret, err
 }
 
@@ -383,7 +383,7 @@ func (t *DatetimeConversion) Eval(ctx *sql.Context, r sql.Row) (interface{}, err
 	if err != nil {
 		return nil, err
 	}
-	ret, _, err := types.DatetimeMaxPrecision.Convert(e)
+	ret, _, err := types.DatetimeMaxPrecision.Convert(ctx, e)
 	return ret, err
 }
 
@@ -481,7 +481,7 @@ func (ut *UnixTimestamp) Eval(ctx *sql.Context, row sql.Row) (interface{}, error
 		return nil, nil
 	}
 
-	date, _, err = types.DatetimeMaxPrecision.Convert(date)
+	date, _, err = types.DatetimeMaxPrecision.Convert(ctx, date)
 	if err != nil {
 		// If we aren't able to convert the value to a date, return 0 and set
 		// a warning to match MySQL's behavior
@@ -512,7 +512,7 @@ func (ut *UnixTimestamp) Eval(ctx *sql.Context, row sql.Row) (interface{}, error
 }
 
 func toUnixTimestamp(t time.Time) (interface{}, error) {
-	ret, _, err := types.Float64.Convert(float64(t.Unix()) + float64(t.Nanosecond())/float64(1000000000))
+	ret, _, err := types.Float64.Convert(ctx, float64(t.Unix())+float64(t.Nanosecond())/float64(1000000000))
 	return ret, err
 }
 
@@ -556,7 +556,7 @@ func (r *FromUnixtime) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) 
 		return nil, nil
 	}
 
-	n, _, err := types.Int64.Convert(val)
+	n, _, err := types.Int64.Convert(ctx, val)
 	if err != nil {
 		return nil, err
 	}

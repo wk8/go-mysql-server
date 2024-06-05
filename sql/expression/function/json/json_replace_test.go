@@ -82,7 +82,7 @@ func TestReplace(t *testing.T) {
 
 				var expect interface{}
 				if tstC.expected != nil {
-					expect, _, err = types.JSON.Convert(tstC.expected)
+					expect, _, err = types.JSON.Convert(ctx, tstC.expected)
 					if err != nil {
 						panic("Bad test string. Can't convert string to JSONDocument: " + tstC.expected.(string))
 					}

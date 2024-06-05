@@ -63,7 +63,7 @@ func (ppr *ProcedureReference) InitializeVariable(name string, sqlType sql.Type,
 	if ppr == nil || ppr.InnermostScope == nil {
 		return fmt.Errorf("cannot initialize variable `%s` in an empty procedure reference", name)
 	}
-	convertedVal, _, err := sqlType.Convert(val)
+	convertedVal, _, err := sqlType.Convert(ctx, val)
 	if err != nil {
 		return err
 	}
@@ -147,7 +147,7 @@ func (ppr *ProcedureReference) SetVariable(name string, val interface{}, valType
 	for scope != nil {
 		if varRefVal, ok := scope.variables[lowerName]; ok {
 			//TODO: do some actual type checking using the given value's type
-			val, _, err := varRefVal.SqlType.Convert(val)
+			val, _, err := varRefVal.SqlType.Convert(ctx, val)
 			if err != nil {
 				return err
 			}

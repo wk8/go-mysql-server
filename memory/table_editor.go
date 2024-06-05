@@ -182,13 +182,13 @@ func (t *tableEditor) Insert(ctx *sql.Context, row sql.Row) error {
 	idx := t.ea.TableData().autoColIdx
 	if idx >= 0 {
 		autoCol := t.ea.TableData().schema.Schema[idx]
-		cmp, err := autoCol.Type.Compare(row[idx], t.ea.TableData().autoIncVal)
+		cmp, err := autoCol.Type.Compare(ctx, row[idx], t.ea.TableData().autoIncVal)
 		if err != nil {
 			return err
 		}
 		if cmp > 0 {
 			// Provided value larger than autoIncVal, set autoIncVal to that value
-			v, _, err := types.Uint64.Convert(row[idx])
+			v, _, err := types.Uint64.Convert(ctx, row[idx])
 			if err != nil {
 				return err
 			}
@@ -550,7 +550,7 @@ func (pke *pkTableEditAccumulator) deleteHelper(table *TableData, row sql.Row) e
 			}
 
 			var err error
-			matches, err = partitionRow.Equals(row, table.schema.PhysicalSchema())
+			matches, err = partitionRow.Equals(ctx, row, table.schema.PhysicalSchema())
 			if err != nil {
 				return err
 			}
@@ -670,7 +670,7 @@ func (k *keylessTableEditAccumulator) TableData() *TableData {
 // Insert implements the tableEditAccumulator interface.
 func (k *keylessTableEditAccumulator) Insert(value sql.Row) error {
 	for i, row := range k.deletes {
-		eq, err := value.Equals(row, k.tableData.schema.Schema.PhysicalSchema())
+		eq, err := value.Equals(ctx, row, k.tableData.schema.Schema.PhysicalSchema())
 		if err != nil {
 			return err
 		}
@@ -688,7 +688,7 @@ func (k *keylessTableEditAccumulator) Insert(value sql.Row) error {
 // Delete implements the tableEditAccumulator interface.
 func (k *keylessTableEditAccumulator) Delete(value sql.Row) error {
 	for i, row := range k.adds {
-		eq, err := value.Equals(row, k.tableData.schema.Schema.PhysicalSchema())
+		eq, err := value.Equals(ctx, row, k.tableData.schema.Schema.PhysicalSchema())
 		if err != nil {
 			return err
 		}
@@ -786,7 +786,7 @@ func (k *keylessTableEditAccumulator) deleteHelper(table *TableData, row sql.Row
 		for partitionRowIndex, partitionRow := range partition {
 			matches = true
 			var err error
-			matches, err = partitionRow.Equals(storageRow, table.schema.Schema.PhysicalSchema())
+			matches, err = partitionRow.Equals(ctx, storageRow, table.schema.Schema.PhysicalSchema())
 			if err != nil {
 				return err
 			}
@@ -844,7 +844,7 @@ func formatRow(r sql.Row, idxs []int) string {
 func checkRow(schema sql.Schema, row sql.Row) error {
 	for i, value := range row {
 		c := schema[i]
-		if !c.Check(value) {
+		if !c.Check(ctx, value) {
 			return sql.ErrInvalidType.New(value)
 		}
 	}

@@ -133,7 +133,7 @@ func (b *IndexBuilder) Equals(ctx *Context, colExpr string, keys ...interface{})
 		}
 
 		var err error
-		k, _, err = typ.Convert(k)
+		k, _, err = typ.Convert(ctx, k)
 		if err != nil {
 			b.isInvalid = true
 			b.err = err
@@ -171,7 +171,7 @@ func (b *IndexBuilder) NotEquals(ctx *Context, colExpr string, key interface{}) 
 		}
 	}
 
-	key, _, err := typ.Convert(key)
+	key, _, err := typ.Convert(ctx, key)
 	if err != nil {
 		b.isInvalid = true
 		b.err = err
@@ -180,7 +180,7 @@ func (b *IndexBuilder) NotEquals(ctx *Context, colExpr string, key interface{}) 
 
 	b.updateCol(ctx, colExpr, GreaterThanRangeColumnExpr(key, typ), LessThanRangeColumnExpr(key, typ))
 	if !b.isInvalid {
-		ranges, err := SimplifyRangeColumn(b.ranges[colExpr]...)
+		ranges, err := SimplifyRangeColumn(ctx, b.ranges[colExpr]...)
 		if err != nil {
 			b.isInvalid = true
 			b.err = err
@@ -211,7 +211,7 @@ func (b *IndexBuilder) GreaterThan(ctx *Context, colExpr string, key interface{}
 		key = floor(key)
 	}
 
-	key, _, err := typ.Convert(key)
+	key, _, err := typ.Convert(ctx, key)
 	if err != nil {
 		b.isInvalid = true
 		b.err = err
@@ -246,7 +246,7 @@ func (b *IndexBuilder) GreaterOrEqual(ctx *Context, colExpr string, key interfac
 		key = newKey
 	}
 
-	key, _, err := typ.Convert(key)
+	key, _, err := typ.Convert(ctx, key)
 	if err != nil {
 		b.isInvalid = true
 		b.err = err
@@ -279,7 +279,7 @@ func (b *IndexBuilder) LessThan(ctx *Context, colExpr string, key interface{}) *
 	if t, ok := typ.(NumberType); ok && !t.IsFloat() {
 		key = ceil(key)
 	}
-	key, _, err := typ.Convert(key)
+	key, _, err := typ.Convert(ctx, key)
 	if err != nil {
 		b.isInvalid = true
 		b.err = err
@@ -314,7 +314,7 @@ func (b *IndexBuilder) LessOrEqual(ctx *Context, colExpr string, key interface{}
 		key = newKey
 	}
 
-	key, _, err := typ.Convert(key)
+	key, _, err := typ.Convert(ctx, key)
 	if err != nil {
 		b.isInvalid = true
 		b.err = err
@@ -415,7 +415,7 @@ func (b *IndexBuilder) Ranges(ctx *Context) RangeCollection {
 		for colIdx, exprIdx := range permutation {
 			currentRange[colIdx] = allColumns[colIdx][exprIdx]
 		}
-		isempty, err := currentRange.IsEmpty()
+		isempty, err := currentRange.IsEmpty(ctx)
 		if err != nil {
 			b.err = err
 			return nil
@@ -466,7 +466,7 @@ func (b *IndexBuilder) updateCol(ctx *Context, colExpr string, potentialRanges .
 	for _, currentRange := range currentRanges {
 		for _, potentialRange := range potentialRanges {
 
-			newRange, ok, err := currentRange.TryIntersect(potentialRange)
+			newRange, ok, err := currentRange.TryIntersect(ctx, potentialRange)
 			if err != nil {
 				b.isInvalid = true
 				if !ErrInvalidValue.Is(err) {
@@ -475,7 +475,7 @@ func (b *IndexBuilder) updateCol(ctx *Context, colExpr string, potentialRanges .
 				return
 			}
 			if ok {
-				isempty, err := newRange.IsEmpty()
+				isempty, err := newRange.IsEmpty(ctx)
 				if err != nil {
 					b.isInvalid = true
 					b.err = err

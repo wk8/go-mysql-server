@@ -159,14 +159,14 @@ func (j *jsonObjectBuffer) Update(ctx *sql.Context, row sql.Row) error {
 
 	// unwrap JSON values
 	if js, ok := val.(sql.JSONWrapper); ok {
-		val, err = js.ToInterface()
+		val, err = js.ToInterface(ctx)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Update the map.
-	keyAsString, _, err := types.LongText.Convert(key)
+	keyAsString, _, err := types.LongText.Convert(ctx, key)
 	if err != nil {
 		return nil
 	}

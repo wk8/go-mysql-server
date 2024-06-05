@@ -182,7 +182,7 @@ func (c *Case) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 			}
 			// When unable to convert to the type of the case, return the original value
 			// A common error here is "Out of bounds value for decimal type"
-			if ret, _, err := t.Convert(bval); err == nil {
+			if ret, _, err := t.Convert(ctx, bval); err == nil {
 				return ret, nil
 			}
 			return bval, nil
@@ -196,7 +196,7 @@ func (c *Case) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 		}
 		// When unable to convert to the type of the case, return the original value
 		// A common error here is "Out of bounds value for decimal type"
-		if ret, _, err := t.Convert(val); err == nil {
+		if ret, _, err := t.Convert(ctx, val); err == nil {
 			return ret, nil
 		}
 		return val, nil

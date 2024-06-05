@@ -157,7 +157,7 @@ func (b *Builder) buildLimitVal(inScope *scope, e ast.Expr) sql.Expression {
 			if col, ok := inScope.proc.GetVar(e.String()); ok {
 				// proc param is OK
 				if pp, ok := col.scalarGf().(*expression.ProcedureParam); ok {
-					if !pp.Type().Promote().Equals(types.Int64) && !pp.Type().Promote().Equals(types.Uint64) {
+					if !pp.Type().Promote().Equals(ctx, types.Int64) && !pp.Type().Promote().Equals(ctx, types.Uint64) {
 						err := fmt.Errorf("the variable '%s' has a non-integer based type: %s", pp.Name(), pp.Type().String())
 						b.handleErr(err)
 					}
@@ -178,7 +178,7 @@ func (b *Builder) typeCoerceLiteral(e sql.Expression) sql.Expression {
 	// todo this should be in a module that can generically coerce to a type or type class
 	switch e := e.(type) {
 	case *expression.Literal:
-		val, _, err := types.Int64.Convert(e.Value())
+		val, _, err := types.Int64.Convert(ctx, e.Value())
 		if err != nil {
 			err = fmt.Errorf("%s: %w", err.Error(), sql.ErrInvalidTypeForLimit.New(types.Int64, e.Type()))
 		}

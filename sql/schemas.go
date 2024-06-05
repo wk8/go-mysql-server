@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"context"
 	"reflect"
 	"strings"
 
@@ -33,7 +34,7 @@ const MaxIdentifierLength = 64
 type Schema []*Column
 
 // CheckRow checks the row conforms to the schema.
-func (s Schema) CheckRow(row Row) error {
+func (s Schema) CheckRow(ctx context.Context, row Row) error {
 	expected := len(s)
 	got := len(row)
 	if expected != got {
@@ -42,7 +43,7 @@ func (s Schema) CheckRow(row Row) error {
 
 	for idx, f := range s {
 		v := row[idx]
-		if f.Check(v) {
+		if f.Check(ctx, v) {
 			continue
 		}
 

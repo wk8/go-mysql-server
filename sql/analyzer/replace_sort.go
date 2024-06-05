@@ -303,7 +303,7 @@ func hasOverlapping(sfExprs []sql.Expression, ranges sql.RangeCollection) bool {
 	for si := range sfExprs {
 		for ri := 0; ri < len(ranges)-1; ri++ {
 			for rj := ri + 1; rj < len(ranges); rj++ {
-				if _, overlaps, _ := ranges[ri][si].Overlaps(ranges[rj][si]); overlaps {
+				if _, overlaps, _ := ranges[ri][si].Overlaps(ranges[rj][si], ctx); overlaps {
 					return true
 				}
 			}

@@ -15,6 +15,7 @@
 package types
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"reflect"
@@ -128,7 +129,7 @@ func (t datetimeType) Precision() int {
 }
 
 // Compare implements Type interface.
-func (t datetimeType) Compare(a interface{}, b interface{}) (int, error) {
+func (t datetimeType) Compare(context context.Context, a interface{}, b interface{}) (int, error) {
 	if hasNulls, res := CompareNulls(a, b); hasNulls {
 		return res, nil
 	}
@@ -164,7 +165,7 @@ func (t datetimeType) Compare(a interface{}, b interface{}) (int, error) {
 }
 
 // Convert implements Type interface.
-func (t datetimeType) Convert(v interface{}) (interface{}, sql.ConvertInRange, error) {
+func (t datetimeType) Convert(ctx context.Context, v interface{}) (interface{}, sql.ConvertInRange, error) {
 	if v == nil {
 		return nil, sql.InRange, nil
 	}
@@ -334,16 +335,8 @@ func (t datetimeType) ConvertWithoutRangeCheck(v interface{}) (time.Time, error)
 	return res, nil
 }
 
-func (t datetimeType) MustConvert(v interface{}) interface{} {
-	value, _, err := t.Convert(v)
-	if err != nil {
-		panic(err)
-	}
-	return value
-}
-
 // Equals implements the Type interface.
-func (t datetimeType) Equals(otherType sql.Type) bool {
+func (t datetimeType) Equals(ctx context.Context, otherType sql.Type) bool {
 	return t.baseType == otherType.Type()
 }
 
@@ -365,12 +358,12 @@ func (t datetimeType) Promote() sql.Type {
 }
 
 // SQL implements Type interface.
-func (t datetimeType) SQL(_ *sql.Context, dest []byte, v interface{}) (sqltypes.Value, error) {
+func (t datetimeType) SQL(ctx *sql.Context, dest []byte, v interface{}) (sqltypes.Value, error) {
 	if v == nil {
 		return sqltypes.NULL, nil
 	}
 
-	v, _, err := t.Convert(v)
+	v, _, err := t.Convert(ctx, v)
 	if err != nil {
 		return sqltypes.Value{}, err
 	}

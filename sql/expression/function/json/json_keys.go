@@ -18,12 +18,10 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/dolthub/jsonpath"
-	"gopkg.in/src-d/go-errors.v1"
-
 	"github.com/dolthub/go-mysql-server/sql"
 	"github.com/dolthub/go-mysql-server/sql/expression"
 	"github.com/dolthub/go-mysql-server/sql/types"
+	"github.com/dolthub/jsonpath"
 )
 
 // JSONKeys (json_doc[, path])
@@ -105,7 +103,7 @@ func (j *JSONKeys) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 		return nil, nil
 	}
 
-	js, err := types.LookupJSONValue(doc, *path)
+	js, err := types.LookupJSONValue(ctx, doc, *path)
 	if err != nil {
 		if errors.Is(err, jsonpath.ErrKeyError) {
 			return nil, nil
@@ -117,7 +115,7 @@ func (j *JSONKeys) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 		return nil, nil
 	}
 
-	val, err := js.ToInterface()
+	val, err := js.ToInterface(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +132,7 @@ func (j *JSONKeys) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 			}
 			return res[i] < res[j]
 		})
-		result, _, err := types.JSON.Convert(res)
+		result, _, err := types.JSON.Convert(ctx, res)
 		if err != nil {
 			return nil, err
 		}

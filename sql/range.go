@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -29,12 +30,12 @@ type Range []RangeColumnExpr
 
 // Equals returns whether the given RangeCollection matches the calling RangeCollection. The order of each Range is
 // important, therefore it is recommended to sort two collections beforehand.
-func (ranges RangeCollection) Equals(otherCollection RangeCollection) (bool, error) {
+func (ranges RangeCollection) Equals(ctx context.Context, otherCollection RangeCollection) (bool, error) {
 	if len(ranges) != len(otherCollection) {
 		return false, nil
 	}
 	for i := range ranges {
-		if ok, err := ranges[i].Equals(otherCollection[i]); err != nil || !ok {
+		if ok, err := ranges[i].Equals(ctx, otherCollection[i]); err != nil || !ok {
 			return ok, err
 		}
 	}
@@ -44,11 +45,11 @@ func (ranges RangeCollection) Equals(otherCollection RangeCollection) (bool, err
 // Intersect attempts to intersect the given RangeCollection with the calling RangeCollection. This ensures that each
 // Range belonging to the same collection is treated as a union with respect to that same collection, rather than
 // attempting to intersect ranges that are a part of the same collection.
-func (ranges RangeCollection) Intersect(otherRanges RangeCollection) (RangeCollection, error) {
+func (ranges RangeCollection) Intersect(ctx context.Context, otherRanges RangeCollection) (RangeCollection, error) {
 	var newRanges RangeCollection
 	for _, rang := range ranges {
 		for _, otherRange := range otherRanges {
-			newRange, err := rang.Intersect(otherRange)
+			newRange, err := rang.Intersect(ctx, otherRange)
 			if err != nil {
 				return nil, err
 			}
@@ -57,7 +58,7 @@ func (ranges RangeCollection) Intersect(otherRanges RangeCollection) (RangeColle
 			}
 		}
 	}
-	newRanges, err := RemoveOverlappingRanges(newRanges...)
+	newRanges, err := RemoveOverlappingRanges(ctx, newRanges...)
 	if err != nil {
 		return nil, err
 	}
@@ -104,12 +105,12 @@ func (rang Range) AsEmpty() Range {
 	return emptyRange
 }
 
-func (rang Range) IsEmpty() (bool, error) {
+func (rang Range) IsEmpty(ctx context.Context) (bool, error) {
 	if len(rang) == 0 {
 		return true, nil
 	}
 	for i := range rang {
-		res, err := rang[i].IsEmpty()
+		res, err := rang[i].IsEmpty(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -142,12 +143,12 @@ func (rang Range) ExpressionByColumnName(idx Index, colExpr string) (RangeColumn
 }
 
 // Equals evaluates whether the calling Range is equivalent to the given Range.
-func (rang Range) Equals(otherRange Range) (bool, error) {
+func (rang Range) Equals(ctx context.Context, otherRange Range) (bool, error) {
 	if len(rang) != len(otherRange) {
 		return false, nil
 	}
 	for i := range rang {
-		if ok, err := rang[i].Equals(otherRange[i]); err != nil || !ok {
+		if ok, err := rang[i].Equals(ctx, otherRange[i]); err != nil || !ok {
 			return false, err
 		}
 	}
@@ -155,16 +156,16 @@ func (rang Range) Equals(otherRange Range) (bool, error) {
 }
 
 // Compare returns an integer stating the relative position of the calling Range to the given Range.
-func (rang Range) Compare(otherRange Range) (int, error) {
+func (rang Range) Compare(ctx context.Context, otherRange Range) (int, error) {
 	if len(rang) != len(otherRange) {
 		return 0, fmt.Errorf("compared ranges must have matching lengths")
 	}
 	for i := range rang {
-		cmp, err := rang[i].LowerBound.Compare(otherRange[i].LowerBound, rang[i].Typ)
+		cmp, err := rang[i].LowerBound.Compare(ctx, otherRange[i].LowerBound, rang[i].Typ)
 		if err != nil || cmp != 0 {
 			return cmp, err
 		}
-		cmp, err = rang[i].UpperBound.Compare(otherRange[i].UpperBound, rang[i].Typ)
+		cmp, err = rang[i].UpperBound.Compare(ctx, otherRange[i].UpperBound, rang[i].Typ)
 		if err != nil || cmp != 0 {
 			return cmp, err
 		}
@@ -173,13 +174,13 @@ func (rang Range) Compare(otherRange Range) (int, error) {
 }
 
 // Intersect intersects the given Range with the calling Range.
-func (rang Range) Intersect(otherRange Range) (Range, error) {
+func (rang Range) Intersect(ctx context.Context, otherRange Range) (Range, error) {
 	if len(rang) != len(otherRange) {
 		return nil, nil
 	}
 	newRangeCollection := make(Range, len(rang))
 	for i := range rang {
-		intersectedRange, ok, err := rang[i].TryIntersect(otherRange[i])
+		intersectedRange, ok, err := rang[i].TryIntersect(ctx, otherRange[i])
 		if err != nil {
 			return nil, err
 		}
@@ -194,16 +195,16 @@ func (rang Range) Intersect(otherRange Range) (Range, error) {
 // TryMerge attempts to merge the given Range with the calling Range. This can only do a merge if one Range is a subset
 // of the other, or if all columns except for one are equivalent, upon which a union is attempted on that column.
 // Returns true if the merge was successful.
-func (rang Range) TryMerge(otherRange Range) (Range, bool, error) {
+func (rang Range) TryMerge(ctx context.Context, otherRange Range) (Range, bool, error) {
 	if len(rang) != len(otherRange) {
 		return nil, false, nil
 	}
-	if ok, err := rang.IsSupersetOf(otherRange); err != nil {
+	if ok, err := rang.IsSupersetOf(ctx, otherRange); err != nil {
 		return nil, false, err
 	} else if ok {
 		return rang, true, nil
 	}
-	if ok, err := otherRange.IsSupersetOf(rang); err != nil {
+	if ok, err := otherRange.IsSupersetOf(ctx, rang); err != nil {
 		return nil, false, err
 	} else if ok {
 		return otherRange, true, nil
@@ -212,7 +213,7 @@ func (rang Range) TryMerge(otherRange Range) (Range, bool, error) {
 	indexToMerge := -1
 	// The superset checks will cover if every column expr is equivalent
 	for i := 0; i < len(rang); i++ {
-		if ok, err := rang[i].Equals(otherRange[i]); err != nil {
+		if ok, err := rang[i].Equals(ctx, otherRange[i]); err != nil {
 			return nil, false, err
 		} else if !ok {
 			// Only one column may not equal another
@@ -226,7 +227,7 @@ func (rang Range) TryMerge(otherRange Range) (Range, bool, error) {
 	if indexToMerge == -1 {
 		return nil, false, fmt.Errorf("invalid index to merge")
 	}
-	mergedLastExpr, ok, err := rang[indexToMerge].TryUnion(otherRange[indexToMerge])
+	mergedLastExpr, ok, err := rang[indexToMerge].TryUnion(ctx, otherRange[indexToMerge])
 	if err != nil || !ok {
 		return nil, false, err
 	}
@@ -236,12 +237,12 @@ func (rang Range) TryMerge(otherRange Range) (Range, bool, error) {
 }
 
 // IsSubsetOf evaluates whether the calling Range is fully encompassed by the given Range.
-func (rang Range) IsSubsetOf(otherRange Range) (bool, error) {
+func (rang Range) IsSubsetOf(ctx context.Context, otherRange Range) (bool, error) {
 	if len(rang) != len(otherRange) {
 		return false, nil
 	}
 	for i := range rang {
-		ok, err := rang[i].IsSubsetOf(otherRange[i])
+		ok, err := rang[i].IsSubsetOf(ctx, otherRange[i])
 		if err != nil || !ok {
 			return false, err
 		}
@@ -250,18 +251,18 @@ func (rang Range) IsSubsetOf(otherRange Range) (bool, error) {
 }
 
 // IsSupersetOf evaluates whether the calling Range fully encompasses the given Range.
-func (rang Range) IsSupersetOf(otherRange Range) (bool, error) {
-	return otherRange.IsSubsetOf(rang)
+func (rang Range) IsSupersetOf(ctx context.Context, otherRange Range) (bool, error) {
+	return otherRange.IsSubsetOf(ctx, rang)
 }
 
 // IsConnected returns whether the calling Range and given Range have overlapping values, which would result in the same
 // values being returned from some subset of both ranges.
-func (rang Range) IsConnected(otherRange Range) (bool, error) {
+func (rang Range) IsConnected(ctx context.Context, otherRange Range) (bool, error) {
 	if len(rang) != len(otherRange) {
 		return false, nil
 	}
 	for i := range rang {
-		_, ok, err := rang[i].Overlaps(otherRange[i])
+		_, ok, err := rang[i].Overlaps(ctx, otherRange[i])
 		if err != nil || !ok {
 			return false, err
 		}
@@ -271,12 +272,12 @@ func (rang Range) IsConnected(otherRange Range) (bool, error) {
 
 // Overlaps returns whether the calling Range and given Range have overlapping values, which would result in the same
 // values being returned from some subset of both ranges.
-func (rang Range) Overlaps(otherRange Range) (bool, error) {
+func (rang Range) Overlaps(ctx context.Context, otherRange Range) (bool, error) {
 	if len(rang) != len(otherRange) {
 		return false, nil
 	}
 	for i := range rang {
-		_, ok, err := rang[i].Overlaps(otherRange[i])
+		_, ok, err := rang[i].Overlaps(ctx, otherRange[i])
 		if err != nil || !ok {
 			return false, err
 		}
@@ -289,7 +290,7 @@ func (rang Range) Overlaps(otherRange Range) (bool, error) {
 // one Range is returned. Otherwise, this returns a collection of ranges that do not overlap with each other, and covers
 // the entirety of the original ranges (and nothing more). If the two ranges do not overlap and are not mergeable then
 // false is returned, otherwise returns true.
-func (rang Range) RemoveOverlap(otherRange Range) (RangeCollection, bool, error) {
+func (rang Range) RemoveOverlap(ctx context.Context, otherRange Range) (RangeCollection, bool, error) {
 	// An explanation on why overlapping ranges may return more than one range, and why they can't just be merged as-is.
 	// Let's start with a Range that has a single RangeColumnExpression (a one-dimensional range). Imagine this as a
 	// number line with contiguous sections defined as the range. If you have any two sections that overlap, then you
@@ -313,39 +314,39 @@ func (rang Range) RemoveOverlap(otherRange Range) (RangeCollection, bool, error)
 
 	// If the two ranges may be merged then we just do that and return.
 	// Also allows us to not have to worry about the case where every column is equivalent.
-	if mergedRange, ok, err := rang.TryMerge(otherRange); err != nil {
+	if mergedRange, ok, err := rang.TryMerge(ctx, otherRange); err != nil {
 		return nil, false, err
 	} else if ok {
 		return []Range{mergedRange}, true, nil
 	}
 	// We check for overlapping after checking for merge as two ranges may not overlap but may be mergeable.
 	// This would occur if all other columns are equivalent except for one column that is overlapping or adjacent.
-	if ok, err := rang.Overlaps(otherRange); err != nil || !ok {
+	if ok, err := rang.Overlaps(ctx, otherRange); err != nil || !ok {
 		return []Range{rang, otherRange}, false, err
 	}
 
 	var ranges []Range
 	for i := range rang {
-		if ok, err := rang[i].Equals(otherRange[i]); err != nil {
+		if ok, err := rang[i].Equals(ctx, otherRange[i]); err != nil {
 			return nil, false, err
 		} else if ok {
 			continue
 		}
 		// Get the RangeColumnExpr that overlaps both RangeColumnExprs
-		overlapExpr, _, err := rang[i].Overlaps(otherRange[i])
+		overlapExpr, _, err := rang[i].Overlaps(ctx, otherRange[i])
 		if err != nil {
 			return nil, false, err
 		}
 		// Subtract the overlapping range from each existing range.
 		// This will give us a collection of ranges that do not have any overlap.
-		range1Subtracted, err := rang[i].Subtract(overlapExpr)
+		range1Subtracted, err := rang[i].Subtract(ctx, overlapExpr)
 		if err != nil {
 			return nil, false, err
 		}
 		for _, newColExpr := range range1Subtracted {
 			ranges = append(ranges, rang.replace(i, newColExpr))
 		}
-		range2Subtracted, err := otherRange[i].Subtract(overlapExpr)
+		range2Subtracted, err := otherRange[i].Subtract(ctx, overlapExpr)
 		if err != nil {
 			return nil, false, err
 		}
@@ -355,7 +356,7 @@ func (rang Range) RemoveOverlap(otherRange Range) (RangeCollection, bool, error)
 		// Create two ranges that replace each respective RangeColumnExpr with the overlapping one, giving us two
 		// ranges that are guaranteed to overlap (and are a subset of the originals). We can then recursively call this
 		// function on the new overlapping ranges which will eventually return a set of non-overlapping ranges.
-		newRanges, _, err := rang.replace(i, overlapExpr).RemoveOverlap(otherRange.replace(i, overlapExpr))
+		newRanges, _, err := rang.replace(i, overlapExpr).RemoveOverlap(ctx, otherRange.replace(i, overlapExpr))
 		if err != nil {
 			return nil, false, err
 		}
@@ -403,45 +404,8 @@ func (rang Range) replace(i int, colExpr RangeColumnExpr) Range {
 	return newRange
 }
 
-// IntersectRanges intersects each Range for each column expression. If a RangeColumnExpr ends up with no valid ranges
-// then a nil is returned.
-func IntersectRanges(ranges ...Range) Range {
-	if len(ranges) == 0 {
-		return nil
-	}
-	var rang Range
-	i := 0
-	for ; i < len(ranges); i++ {
-		rc := ranges[i]
-		if len(rc) == 0 {
-			continue
-		}
-		rang = rc
-		break
-	}
-	if len(rang) == 0 {
-		return nil
-	}
-	i++
-
-	for ; i < len(ranges); i++ {
-		rc := ranges[i]
-		if len(rc) == 0 {
-			continue
-		}
-		newRange, err := rang.Intersect(rc)
-		if err != nil || len(newRange) == 0 {
-			return nil
-		}
-	}
-	if len(rang) == 0 {
-		return nil
-	}
-	return rang
-}
-
 // RemoveOverlappingRanges removes all overlap between all ranges.
-func RemoveOverlappingRanges(ranges ...Range) (RangeCollection, error) {
+func RemoveOverlappingRanges(ctx context.Context, ranges ...Range) (RangeCollection, error) {
 	if len(ranges) == 0 {
 		return nil, nil
 	}
@@ -453,20 +417,20 @@ func RemoveOverlappingRanges(ranges ...Range) (RangeCollection, error) {
 	}
 	for i := 1; i < len(ranges); i++ {
 		rang := ranges[i]
-		connectingRanges, err := rangeTree.FindConnections(rang, 0)
+		connectingRanges, err := rangeTree.FindConnections(ctx, rang, 0)
 		if err != nil {
 			return nil, err
 		}
 		foundOverlap := false
 		for _, connectingRange := range connectingRanges {
 			if connectingRange != nil {
-				newRanges, ok, err := connectingRange.RemoveOverlap(rang)
+				newRanges, ok, err := connectingRange.RemoveOverlap(ctx, rang)
 				if err != nil {
 					return nil, err
 				}
 				if ok {
 					foundOverlap = true
-					err = rangeTree.Remove(connectingRange)
+					err = rangeTree.Remove(ctx, connectingRange)
 					if err != nil {
 						return nil, err
 					}
@@ -477,19 +441,19 @@ func RemoveOverlappingRanges(ranges ...Range) (RangeCollection, error) {
 			}
 		}
 		if !foundOverlap {
-			err = rangeTree.Insert(rang)
+			err = rangeTree.Insert(ctx, rang)
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	rangeColl, err := rangeTree.GetRangeCollection()
+	rangeColl, err := rangeTree.GetRangeCollection(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	if err = validateRangeCollection(rangeColl); err != nil {
+	if err = validateRangeCollection(ctx, rangeColl); err != nil {
 		return nil, err
 	}
 
@@ -497,12 +461,12 @@ func RemoveOverlappingRanges(ranges ...Range) (RangeCollection, error) {
 }
 
 // SortRanges sorts the given ranges, returning a new slice of ranges.
-func SortRanges(ranges ...Range) ([]Range, error) {
+func SortRanges(ctx context.Context, ranges ...Range) ([]Range, error) {
 	sortedRanges := make([]Range, len(ranges))
 	copy(sortedRanges, ranges)
 	var err error
 	sort.Slice(sortedRanges, func(i, j int) bool {
-		cmp, cmpErr := sortedRanges[i].Compare(sortedRanges[j])
+		cmp, cmpErr := sortedRanges[i].Compare(ctx, sortedRanges[j])
 		if cmpErr != nil {
 			err = cmpErr
 		}
@@ -511,10 +475,10 @@ func SortRanges(ranges ...Range) ([]Range, error) {
 	return sortedRanges, err
 }
 
-func validateRangeCollection(rangeColl RangeCollection) error {
+func validateRangeCollection(ctx context.Context, rangeColl RangeCollection) error {
 	for i := 0; i < len(rangeColl)-1; i++ {
 		for j := i + 1; j < len(rangeColl); j++ {
-			if ok, err := rangeColl[i].Overlaps(rangeColl[j]); err != nil {
+			if ok, err := rangeColl[i].Overlaps(ctx, rangeColl[j]); err != nil {
 				return err
 			} else if ok {
 				return fmt.Errorf("overlapping ranges: %s and %s", rangeColl[i].String(), rangeColl[j].String())

@@ -180,7 +180,7 @@ func TestRangeOverlapTwoColumns(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("Expr:  %s\nRange: %s", test.reference.String(), test.ranges.DebugString()), func(t *testing.T) {
-			discreteRanges, err := sql.RemoveOverlappingRanges(test.ranges...)
+			discreteRanges, err := sql.RemoveOverlappingRanges(ctx, test.ranges...)
 			require.NoError(t, err)
 			verificationRanges, err := removeOverlappingRangesVerification(test.ranges...)
 			require.NoError(t, err)
@@ -190,11 +190,11 @@ func TestRangeOverlapTwoColumns(t *testing.T) {
 				rangeBool := evalRanges(t, discreteRanges, row)
 				assert.Equal(t, referenceBool, rangeBool, fmt.Sprintf("%v: DiscreteRanges: %s", row, discreteRanges.DebugString()))
 			}
-			discreteRanges, err = sql.SortRanges(discreteRanges...)
+			discreteRanges, err = sql.SortRanges(ctx, discreteRanges...)
 			require.NoError(t, err)
-			verificationRanges, err = sql.SortRanges(verificationRanges...)
+			verificationRanges, err = sql.SortRanges(ctx, verificationRanges...)
 			require.NoError(t, err)
-			ok, err := discreteRanges.Equals(verificationRanges)
+			ok, err := discreteRanges.Equals(ctx, verificationRanges)
 			require.NoError(t, err)
 			assert.True(t, ok)
 		})
@@ -295,7 +295,7 @@ func TestRangeOverlapThreeColumns(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("Expr:  %s\nRange: %s", test.reference.String(), test.ranges.DebugString()), func(t *testing.T) {
-			discreteRanges, err := sql.RemoveOverlappingRanges(test.ranges...)
+			discreteRanges, err := sql.RemoveOverlappingRanges(ctx, test.ranges...)
 			require.NoError(t, err)
 			verificationRanges, err := removeOverlappingRangesVerification(test.ranges...)
 			require.NoError(t, err)
@@ -305,11 +305,11 @@ func TestRangeOverlapThreeColumns(t *testing.T) {
 				rangeBool := evalRanges(t, discreteRanges, row)
 				assert.Equal(t, referenceBool, rangeBool, fmt.Sprintf("%v: DiscreteRanges: %s", row, discreteRanges.DebugString()))
 			}
-			discreteRanges, err = sql.SortRanges(discreteRanges...)
+			discreteRanges, err = sql.SortRanges(ctx, discreteRanges...)
 			require.NoError(t, err)
-			verificationRanges, err = sql.SortRanges(verificationRanges...)
+			verificationRanges, err = sql.SortRanges(ctx, verificationRanges...)
 			require.NoError(t, err)
-			ok, err := discreteRanges.Equals(verificationRanges)
+			ok, err := discreteRanges.Equals(ctx, verificationRanges)
 			require.NoError(t, err)
 			assert.True(t, ok)
 		})
@@ -384,7 +384,7 @@ func TestRangeOverlapNulls(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("Expr:  %s\nRange: %s", test.reference.String(), test.ranges.DebugString()), func(t *testing.T) {
-			discreteRanges, err := sql.RemoveOverlappingRanges(test.ranges...)
+			discreteRanges, err := sql.RemoveOverlappingRanges(ctx, test.ranges...)
 			require.NoError(t, err)
 			verificationRanges, err := removeOverlappingRangesVerification(test.ranges...)
 			require.NoError(t, err)
@@ -394,11 +394,11 @@ func TestRangeOverlapNulls(t *testing.T) {
 				rangeBool := evalRanges(t, discreteRanges, row)
 				assert.Equal(t, referenceBool, rangeBool, fmt.Sprintf("%v: DiscreteRanges: %s", row, discreteRanges.DebugString()))
 			}
-			discreteRanges, err = sql.SortRanges(discreteRanges...)
+			discreteRanges, err = sql.SortRanges(ctx, discreteRanges...)
 			require.NoError(t, err)
-			verificationRanges, err = sql.SortRanges(verificationRanges...)
+			verificationRanges, err = sql.SortRanges(ctx, verificationRanges...)
 			require.NoError(t, err)
-			ok, err := discreteRanges.Equals(verificationRanges)
+			ok, err := discreteRanges.Equals(ctx, verificationRanges)
 			require.NoError(t, err)
 			assert.True(t, ok)
 		})
@@ -571,15 +571,15 @@ func TestComplexRange(t *testing.T) {
 			if test.skip {
 				t.Skip()
 			}
-			discreteRanges, err := sql.RemoveOverlappingRanges(test.ranges...)
+			discreteRanges, err := sql.RemoveOverlappingRanges(ctx, test.ranges...)
 			require.NoError(t, err)
 			verificationRanges, err := removeOverlappingRangesVerification(test.ranges...)
 			require.NoError(t, err)
-			discreteRanges, err = sql.SortRanges(discreteRanges...)
+			discreteRanges, err = sql.SortRanges(ctx, discreteRanges...)
 			require.NoError(t, err)
-			verificationRanges, err = sql.SortRanges(verificationRanges...)
+			verificationRanges, err = sql.SortRanges(ctx, verificationRanges...)
 			require.NoError(t, err)
-			ok, err := discreteRanges.Equals(verificationRanges)
+			ok, err := discreteRanges.Equals(ctx, verificationRanges)
 			require.NoError(t, err)
 			assert.True(t, ok)
 			if !ok {
@@ -592,7 +592,7 @@ func TestComplexRange(t *testing.T) {
 				for j := i + 1; j < len(discreteRanges); j++ {
 					r1 := discreteRanges[i]
 					r2 := discreteRanges[j]
-					hasOverlap, err := r1.Overlaps(r2)
+					hasOverlap, err := r1.Overlaps(ctx, r2)
 					if hasOverlap {
 						t.Logf("Overlap: %s\n%s", r1.String(), r2.String())
 					}
@@ -649,7 +649,7 @@ func evalRange(t *testing.T, rang sql.Range, row []interface{}) bool {
 			rowRange[i] = sql.ClosedRangeColumnExpr(val, val, rangeType)
 		}
 	}
-	ok, err := rang.IsSupersetOf(rowRange)
+	ok, err := rang.IsSupersetOf(ctx, rowRange)
 	require.NoError(t, err)
 	return ok
 }
@@ -663,7 +663,7 @@ func removeOverlappingRangesVerification(ranges ...sql.Range) (sql.RangeCollecti
 	for i := 0; i < len(ranges); i++ {
 		hadOverlap := false
 		for nri := 0; nri < len(newRanges); nri++ {
-			if resultingRanges, ok, err := ranges[i].RemoveOverlap(newRanges[nri]); err != nil {
+			if resultingRanges, ok, err := ranges[i].RemoveOverlap(ctx, newRanges[nri]); err != nil {
 				return nil, err
 			} else if ok {
 				hadOverlap = true
@@ -818,7 +818,7 @@ func buildTestRangeTree(ranges []sql.Range) (*sql.RangeColumnExprTree, error) {
 		return nil, err
 	}
 	for _, rng := range ranges[1:] {
-		err = tree.Insert(rng)
+		err = tree.Insert(ctx, rng)
 		if err != nil {
 			return nil, err
 		}
@@ -988,7 +988,7 @@ func TestRangeTreeInsert(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, test.setupExp, tree.String())
 
-			err = tree.Insert(test.rng)
+			err = tree.Insert(ctx, test.rng)
 			require.NoError(t, err)
 			assert.Equal(t, test.exp, tree.String())
 		})
@@ -1205,7 +1205,7 @@ func TestRangeTreeRemove(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, test.setupExp, tree.String())
 
-			err = tree.Remove(test.rng)
+			err = tree.Remove(ctx, test.rng)
 			require.NoError(t, err)
 			assert.Equal(t, test.exp, tree.String())
 		})

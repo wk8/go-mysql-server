@@ -15,6 +15,7 @@
 package types
 
 import (
+	"context"
 	"reflect"
 
 	"github.com/dolthub/vitess/go/sqltypes"
@@ -35,12 +36,12 @@ type nullType struct{}
 
 // Compare implements Type interface. Note that while this returns 0 (equals)
 // for ordering purposes, in SQL NULL != NULL.
-func (t nullType) Compare(a interface{}, b interface{}) (int, error) {
+func (t nullType) Compare(context context.Context, a interface{}, b interface{}) (int, error) {
 	return 0, nil
 }
 
 // Convert implements Type interface.
-func (t nullType) Convert(v interface{}) (interface{}, sql.ConvertInRange, error) {
+func (t nullType) Convert(ctx context.Context, v interface{}) (interface{}, sql.ConvertInRange, error) {
 	if v != nil {
 		return nil, sql.InRange, ErrValueNotNil.New(v)
 	}
@@ -53,17 +54,8 @@ func (t nullType) MaxTextResponseByteLength(*sql.Context) uint32 {
 	return 0
 }
 
-// MustConvert implements the Type interface.
-func (t nullType) MustConvert(v interface{}) interface{} {
-	value, _, err := t.Convert(v)
-	if err != nil {
-		panic(err)
-	}
-	return value
-}
-
 // Equals implements the Type interface.
-func (t nullType) Equals(otherType sql.Type) bool {
+func (t nullType) Equals(ctx context.Context, otherType sql.Type) bool {
 	_, ok := otherType.(nullType)
 	return ok
 }

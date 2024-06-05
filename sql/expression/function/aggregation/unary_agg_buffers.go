@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/cespare/xxhash/v2"
 	"github.com/shopspring/decimal"
 
 	"github.com/dolthub/go-mysql-server/sql"
@@ -80,7 +79,7 @@ func (m *sumBuffer) PerformSum(v interface{}) {
 	// decimal.Decimal values are evaluated to string value even though the Literal expr type is Decimal type,
 	// so convert it to appropriate Decimal type
 	if s, isStr := v.(string); isStr && types.IsDecimal(m.expr.Type()) {
-		val, _, err := m.expr.Type().Convert(s)
+		val, _, err := m.expr.Type().Convert(ctx, s)
 		if err == nil {
 			v = val
 		}
@@ -98,7 +97,7 @@ func (m *sumBuffer) PerformSum(v interface{}) {
 			m.sum = decimal.NewFromFloat(m.sum.(float64)).Add(n)
 		}
 	default:
-		val, _, err := types.Float64.Convert(n)
+		val, _, err := types.Float64.Convert(ctx, n)
 		if err != nil {
 			val = float64(0)
 		}
@@ -106,7 +105,7 @@ func (m *sumBuffer) PerformSum(v interface{}) {
 			m.sum = float64(0)
 			m.isnil = false
 		}
-		sum, _, err := types.Float64.Convert(m.sum)
+		sum, _, err := types.Float64.Convert(ctx, m.sum)
 		if err != nil {
 			sum = float64(0)
 		}
@@ -260,7 +259,7 @@ func (b *bitAndBuffer) Update(ctx *sql.Context, row sql.Row) error {
 		return nil
 	}
 
-	v, _, err = types.Uint64.Convert(v)
+	v, _, err = types.Uint64.Convert(ctx, v)
 	if err != nil {
 		v = uint64(0)
 	}
@@ -307,7 +306,7 @@ func (b *bitOrBuffer) Update(ctx *sql.Context, row sql.Row) error {
 		return nil
 	}
 
-	v, _, err = types.Uint64.Convert(v)
+	v, _, err = types.Uint64.Convert(ctx, v)
 	if err != nil {
 		v = uint64(0)
 	}
@@ -354,7 +353,7 @@ func (b *bitXorBuffer) Update(ctx *sql.Context, row sql.Row) error {
 		return nil
 	}
 
-	v, _, err = types.Uint64.Convert(v)
+	v, _, err = types.Uint64.Convert(ctx, v)
 	if err != nil {
 		v = uint64(0)
 	}
@@ -423,7 +422,7 @@ func (c *countDistinctBuffer) Update(ctx *sql.Context, row sql.Row) error {
 		if val == nil {
 			return nil
 		}
-		v, _, err := types.Text.Convert(val)
+		v, _, err := types.Text.Convert(ctx, val)
 		if err != nil {
 			return err
 		}
@@ -562,7 +561,7 @@ func (m *maxBuffer) Update(ctx *sql.Context, row sql.Row) error {
 		return nil
 	}
 
-	cmp, err := m.expr.Type().Compare(v, m.val)
+	cmp, err := m.expr.Type().Compare(ctx, v, m.val)
 	if err != nil {
 		return err
 	}
@@ -608,7 +607,7 @@ func (m *minBuffer) Update(ctx *sql.Context, row sql.Row) error {
 		return nil
 	}
 
-	cmp, err := m.expr.Type().Compare(v, m.val)
+	cmp, err := m.expr.Type().Compare(ctx, v, m.val)
 	if err != nil {
 		return err
 	}
@@ -647,7 +646,7 @@ func (j *jsonArrayBuffer) Update(ctx *sql.Context, row sql.Row) error {
 
 	// unwrap JSON values
 	if js, ok := v.(sql.JSONWrapper); ok {
-		v, err = js.ToInterface()
+		v, err = js.ToInterface(ctx)
 		if err != nil {
 			return err
 		}

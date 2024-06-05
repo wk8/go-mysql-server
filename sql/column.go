@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strings"
@@ -58,12 +59,12 @@ type Column struct {
 }
 
 // Check ensures the value is correct for this column.
-func (c *Column) Check(v interface{}) bool {
+func (c *Column) Check(ctx context.Context, v interface{}) bool {
 	if v == nil {
 		return c.Nullable
 	}
 
-	_, _, err := c.Type.Convert(v)
+	_, _, err := c.Type.Convert(ctx, v)
 	return err == nil
 }
 

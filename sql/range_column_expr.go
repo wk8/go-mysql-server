@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -179,12 +180,12 @@ func NotNullRangeColumnExpr(typ Type) RangeColumnExpr {
 }
 
 // Equals checks for equality with the given RangeColumnExpr.
-func (r RangeColumnExpr) Equals(other RangeColumnExpr) (bool, error) {
-	cmpLower, err := r.LowerBound.Compare(other.LowerBound, r.Typ)
+func (r RangeColumnExpr) Equals(ctx context.Context, other RangeColumnExpr) (bool, error) {
+	cmpLower, err := r.LowerBound.Compare(ctx, other.LowerBound, r.Typ)
 	if err != nil {
 		return false, err
 	}
-	cmpUpper, err := r.UpperBound.Compare(other.UpperBound, r.Typ)
+	cmpUpper, err := r.UpperBound.Compare(ctx, other.UpperBound, r.Typ)
 	if err != nil {
 		return false, err
 	}
@@ -202,24 +203,24 @@ func (r RangeColumnExpr) HasUpperBound() bool {
 }
 
 // IsEmpty returns whether this RangeColumnExpr is empty.
-func (r RangeColumnExpr) IsEmpty() (bool, error) {
-	cmp, err := r.LowerBound.Compare(r.UpperBound, r.Typ)
+func (r RangeColumnExpr) IsEmpty(ctx context.Context) (bool, error) {
+	cmp, err := r.LowerBound.Compare(ctx, r.UpperBound, r.Typ)
 	return cmp >= 0, err
 }
 
 // IsConnected evaluates whether the given RangeColumnExpr overlaps or is adjacent to the calling RangeColumnExpr.
-func (r RangeColumnExpr) IsConnected(other RangeColumnExpr) (bool, error) {
+func (r RangeColumnExpr) IsConnected(ctx context.Context, other RangeColumnExpr) (bool, error) {
 	if r.Typ.String() != other.Typ.String() {
 		return false, nil
 	}
-	comp, err := r.LowerBound.Compare(other.UpperBound, r.Typ)
+	comp, err := r.LowerBound.Compare(ctx, other.UpperBound, r.Typ)
 	if err != nil {
 		return false, err
 	}
 	if comp > 0 {
 		return false, nil
 	}
-	comp, err = other.LowerBound.Compare(r.UpperBound, r.Typ)
+	comp, err = other.LowerBound.Compare(ctx, r.UpperBound, r.Typ)
 	if err != nil {
 		return false, err
 	}
@@ -228,23 +229,23 @@ func (r RangeColumnExpr) IsConnected(other RangeColumnExpr) (bool, error) {
 
 // Overlaps evaluates whether the given RangeColumnExpr overlaps the calling RangeColumnExpr. If they do, returns the
 // overlapping region as a RangeColumnExpr.
-func (r RangeColumnExpr) Overlaps(other RangeColumnExpr) (RangeColumnExpr, bool, error) {
+func (r RangeColumnExpr) Overlaps(ctx context.Context, other RangeColumnExpr) (RangeColumnExpr, bool, error) {
 	if r.Typ.String() != other.Typ.String() {
 		return EmptyRangeColumnExpr(r.Typ), false, nil
 	}
-	comp, err := r.LowerBound.Compare(other.UpperBound, r.Typ)
+	comp, err := r.LowerBound.Compare(ctx, other.UpperBound, r.Typ)
 	if err != nil || comp >= 0 {
 		return EmptyRangeColumnExpr(r.Typ), false, err
 	}
-	comp, err = other.LowerBound.Compare(r.UpperBound, r.Typ)
+	comp, err = other.LowerBound.Compare(ctx, r.UpperBound, r.Typ)
 	if err != nil || comp >= 0 {
 		return EmptyRangeColumnExpr(r.Typ), false, err
 	}
-	lowerbound, err := GetRangeCutMax(r.Typ, r.LowerBound, other.LowerBound)
+	lowerbound, err := GetRangeCutMax(ctx, r.Typ, r.LowerBound, other.LowerBound)
 	if err != nil {
 		return EmptyRangeColumnExpr(r.Typ), false, err
 	}
-	upperbound, err := GetRangeCutMin(r.Typ, r.UpperBound, other.UpperBound)
+	upperbound, err := GetRangeCutMin(ctx, r.Typ, r.UpperBound, other.UpperBound)
 	if err != nil {
 		return EmptyRangeColumnExpr(r.Typ), false, err
 	}
@@ -260,19 +261,19 @@ func (r RangeColumnExpr) Overlaps(other RangeColumnExpr) (RangeColumnExpr, bool,
 // given RangeColumnExpr does not overlap the calling RangeColumnExpr, then the calling RangeColumnExpr is returned.
 // If the calling RangeColumnExpr is a strict subset (or equivalent) of the given RangeColumnExpr, then an empty slice
 // is returned. In all other cases, a slice with a single RangeColumnExpr will be returned.
-func (r RangeColumnExpr) Subtract(other RangeColumnExpr) ([]RangeColumnExpr, error) {
-	_, overlaps, err := r.Overlaps(other)
+func (r RangeColumnExpr) Subtract(ctx context.Context, other RangeColumnExpr) ([]RangeColumnExpr, error) {
+	_, overlaps, err := r.Overlaps(ctx, other)
 	if err != nil {
 		return nil, err
 	}
 	if !overlaps {
 		return []RangeColumnExpr{r}, nil
 	}
-	lComp, err := r.LowerBound.Compare(other.LowerBound, r.Typ)
+	lComp, err := r.LowerBound.Compare(ctx, other.LowerBound, r.Typ)
 	if err != nil {
 		return nil, err
 	}
-	uComp, err := r.UpperBound.Compare(other.UpperBound, r.Typ)
+	uComp, err := r.UpperBound.Compare(ctx, other.UpperBound, r.Typ)
 	if err != nil {
 		return nil, err
 	}
@@ -308,15 +309,15 @@ func (r RangeColumnExpr) Subtract(other RangeColumnExpr) ([]RangeColumnExpr, err
 }
 
 // IsSubsetOf evaluates whether the calling RangeColumnExpr is fully encompassed by the given RangeColumnExpr.
-func (r RangeColumnExpr) IsSubsetOf(other RangeColumnExpr) (bool, error) {
+func (r RangeColumnExpr) IsSubsetOf(ctx context.Context, other RangeColumnExpr) (bool, error) {
 	if r.Typ.String() != other.Typ.String() {
 		return false, nil
 	}
-	comp, err := r.LowerBound.Compare(other.LowerBound, r.Typ)
+	comp, err := r.LowerBound.Compare(ctx, other.LowerBound, r.Typ)
 	if err != nil || comp == -1 {
 		return false, err
 	}
-	comp, err = r.UpperBound.Compare(other.UpperBound, r.Typ)
+	comp, err = r.UpperBound.Compare(ctx, other.UpperBound, r.Typ)
 	if err != nil || comp == 1 {
 		return false, err
 	}
@@ -324,8 +325,8 @@ func (r RangeColumnExpr) IsSubsetOf(other RangeColumnExpr) (bool, error) {
 }
 
 // IsSupersetOf evaluates whether the calling RangeColumnExpr fully encompasses the given RangeColumnExpr.
-func (r RangeColumnExpr) IsSupersetOf(other RangeColumnExpr) (bool, error) {
-	return other.IsSubsetOf(r)
+func (r RangeColumnExpr) IsSupersetOf(ctx context.Context, other RangeColumnExpr) (bool, error) {
+	return other.IsSubsetOf(ctx, r)
 }
 
 // String returns this RangeColumnExpr as a string for display purposes.
@@ -388,16 +389,16 @@ func (r RangeColumnExpr) DebugString() string {
 // TryIntersect attempts to intersect the given RangeColumnExpr with the calling RangeColumnExpr. Returns true if the
 // intersection result is not the empty RangeColumnExpr, however a valid RangeColumnExpr is always returned if the error
 // is nil.
-func (r RangeColumnExpr) TryIntersect(other RangeColumnExpr) (RangeColumnExpr, bool, error) {
-	_, l, err := OrderedCuts(r.LowerBound, other.LowerBound, r.Typ)
+func (r RangeColumnExpr) TryIntersect(ctx context.Context, other RangeColumnExpr) (RangeColumnExpr, bool, error) {
+	_, l, err := OrderedCuts(ctx, r.LowerBound, other.LowerBound, r.Typ)
 	if err != nil {
 		return RangeColumnExpr{}, false, err
 	}
-	u, _, err := OrderedCuts(r.UpperBound, other.UpperBound, r.Typ)
+	u, _, err := OrderedCuts(ctx, r.UpperBound, other.UpperBound, r.Typ)
 	if err != nil {
 		return RangeColumnExpr{}, false, err
 	}
-	comp, err := l.Compare(u, r.Typ)
+	comp, err := l.Compare(ctx, u, r.Typ)
 	if err != nil {
 		return RangeColumnExpr{}, false, err
 	}
@@ -409,29 +410,29 @@ func (r RangeColumnExpr) TryIntersect(other RangeColumnExpr) (RangeColumnExpr, b
 
 // TryUnion attempts to combine the given RangeColumnExpr with the calling RangeColumnExpr. Returns true if the union
 // was a success.
-func (r RangeColumnExpr) TryUnion(other RangeColumnExpr) (RangeColumnExpr, bool, error) {
-	if isEmpty, err := other.IsEmpty(); err != nil {
+func (r RangeColumnExpr) TryUnion(ctx context.Context, other RangeColumnExpr) (RangeColumnExpr, bool, error) {
+	if isEmpty, err := other.IsEmpty(ctx); err != nil {
 		return RangeColumnExpr{}, false, err
 	} else if isEmpty {
 		return r, true, nil
 	}
-	if isEmpty, err := r.IsEmpty(); err != nil {
+	if isEmpty, err := r.IsEmpty(ctx); err != nil {
 		return RangeColumnExpr{}, false, err
 	} else if isEmpty {
 		return other, true, nil
 	}
-	connected, err := r.IsConnected(other)
+	connected, err := r.IsConnected(ctx, other)
 	if err != nil {
 		return RangeColumnExpr{}, false, err
 	}
 	if !connected {
 		return RangeColumnExpr{}, false, nil
 	}
-	l, _, err := OrderedCuts(r.LowerBound, other.LowerBound, r.Typ)
+	l, _, err := OrderedCuts(ctx, r.LowerBound, other.LowerBound, r.Typ)
 	if err != nil {
 		return RangeColumnExpr{}, false, err
 	}
-	_, u, err := OrderedCuts(r.UpperBound, other.UpperBound, r.Typ)
+	_, u, err := OrderedCuts(ctx, r.UpperBound, other.UpperBound, r.Typ)
 	if err != nil {
 		return RangeColumnExpr{}, false, err
 	}
@@ -495,9 +496,9 @@ func (r RangeColumnExpr) Type() RangeType {
 
 // RepresentsEquals returns whether this RangeColumnExpr represents an "equals". An "equals" is a special kind of
 // RangeType_ClosedClosed that iterates over a single value (or the specific prefix of some value).
-func (r RangeColumnExpr) RepresentsEquals() (bool, error) {
+func (r RangeColumnExpr) RepresentsEquals(ctx context.Context) (bool, error) {
 	if r.Type() == RangeType_ClosedClosed {
-		cmp, err := r.Typ.Compare(GetRangeCutKey(r.LowerBound), GetRangeCutKey(r.UpperBound))
+		cmp, err := r.Typ.Compare(ctx, GetRangeCutKey(r.LowerBound), GetRangeCutKey(r.UpperBound))
 		if err != nil {
 			return false, err
 		}
@@ -507,8 +508,8 @@ func (r RangeColumnExpr) RepresentsEquals() (bool, error) {
 }
 
 // OrderedCuts returns the given Cuts in order from lowest-touched values to highest-touched values.
-func OrderedCuts(l, r RangeCut, typ Type) (RangeCut, RangeCut, error) {
-	comp, err := l.Compare(r, typ)
+func OrderedCuts(ctx context.Context, l, r RangeCut, typ Type) (RangeCut, RangeCut, error) {
+	comp, err := l.Compare(ctx, r, typ)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -522,12 +523,13 @@ func OrderedCuts(l, r RangeCut, typ Type) (RangeCut, RangeCut, error) {
 type rangeColumnExprSlice struct {
 	ranges []RangeColumnExpr
 	err    error
+	ctx    context.Context
 }
 
 func (r *rangeColumnExprSlice) Len() int      { return len(r.ranges) }
 func (r *rangeColumnExprSlice) Swap(i, j int) { r.ranges[i], r.ranges[j] = r.ranges[j], r.ranges[i] }
 func (r *rangeColumnExprSlice) Less(i, j int) bool {
-	lc, err := r.ranges[i].LowerBound.Compare(r.ranges[j].LowerBound, r.ranges[i].Typ)
+	lc, err := r.ranges[i].LowerBound.Compare(r.ctx, r.ranges[j].LowerBound, r.ranges[i].Typ)
 	if err != nil {
 		r.err = err
 		return false
@@ -537,7 +539,7 @@ func (r *rangeColumnExprSlice) Less(i, j int) bool {
 	} else if lc > 0 {
 		return false
 	}
-	uc, err := r.ranges[i].UpperBound.Compare(r.ranges[j].UpperBound, r.ranges[i].Typ)
+	uc, err := r.ranges[i].UpperBound.Compare(r.ctx, r.ranges[j].UpperBound, r.ranges[i].Typ)
 	if err != nil {
 		r.err = err
 		return false
@@ -546,7 +548,7 @@ func (r *rangeColumnExprSlice) Less(i, j int) bool {
 }
 
 // SimplifyRangeColumn combines all RangeColumnExprs that are connected and returns a new slice.
-func SimplifyRangeColumn(rces ...RangeColumnExpr) ([]RangeColumnExpr, error) {
+func SimplifyRangeColumn(ctx context.Context, rces ...RangeColumnExpr) ([]RangeColumnExpr, error) {
 	if len(rces) == 0 {
 		return rces, nil
 	}
@@ -558,7 +560,7 @@ func SimplifyRangeColumn(rces ...RangeColumnExpr) ([]RangeColumnExpr, error) {
 	}
 	sorted := make([]RangeColumnExpr, len(rces))
 	copy(sorted, rces)
-	rSlice := &rangeColumnExprSlice{ranges: sorted}
+	rSlice := &rangeColumnExprSlice{ctx: ctx, ranges: sorted}
 	sort.Sort(rSlice)
 	if rSlice.err != nil {
 		return nil, rSlice.err
@@ -566,20 +568,20 @@ func SimplifyRangeColumn(rces ...RangeColumnExpr) ([]RangeColumnExpr, error) {
 	var res []RangeColumnExpr
 	cur := EmptyRangeColumnExpr(rces[0].Typ)
 	for _, r := range sorted {
-		merged, ok, err := cur.TryUnion(r)
+		merged, ok, err := cur.TryUnion(ctx, r)
 		if err != nil {
 			return nil, err
 		}
 		if ok {
 			cur = merged
-		} else if curIsEmpty, err := cur.IsEmpty(); err != nil {
+		} else if curIsEmpty, err := cur.IsEmpty(ctx); err != nil {
 			return nil, err
 		} else if !curIsEmpty {
 			res = append(res, cur)
 			cur = r
 		}
 	}
-	if curIsEmpty, err := cur.IsEmpty(); err != nil {
+	if curIsEmpty, err := cur.IsEmpty(ctx); err != nil {
 		return nil, err
 	} else if !curIsEmpty {
 		res = append(res, cur)

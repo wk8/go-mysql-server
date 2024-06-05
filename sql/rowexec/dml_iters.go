@@ -350,7 +350,7 @@ func (o *onDuplicateUpdateHandler) handleRowUpdate(row sql.Row) error {
 	// Otherwise (a row was updated), increment by 2 if the row changed, 0 if not
 	oldRow := row[:len(row)/2]
 	newRow := row[len(row)/2:]
-	if equals, err := oldRow.Equals(newRow, o.schema); err == nil {
+	if equals, err := oldRow.Equals(ctx, newRow, o.schema); err == nil {
 		if equals {
 			// Ig the CLIENT_FOUND_ROWS capabilities flag is set, increment by 1 if a row stays the same.
 			if o.clientFoundRowsCapability {
@@ -381,7 +381,7 @@ func (u *updateRowHandler) handleRowUpdate(row sql.Row) error {
 	u.rowsMatched++
 	oldRow := row[:len(row)/2]
 	newRow := row[len(row)/2:]
-	if equals, err := oldRow.Equals(newRow, u.schema); err == nil {
+	if equals, err := oldRow.Equals(ctx, newRow, u.schema); err == nil {
 		if !equals {
 			u.rowsAffected++
 		}
@@ -439,7 +439,7 @@ func (u *updateJoinRowHandler) handleRowUpdate(row sql.Row) error {
 		u.rowsMatched++ // TODO: This currently returns the incorrect answer
 		tableOldRow := tableToOldRow[tableName]
 		tableNewRow := tableToNewRow[tableName]
-		if equals, err := tableOldRow.Equals(tableNewRow, u.tableMap[tableName]); err == nil {
+		if equals, err := tableOldRow.Equals(ctx, tableNewRow, u.tableMap[tableName]); err == nil {
 			if !equals {
 				u.rowsAffected++
 			}

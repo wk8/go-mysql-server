@@ -15,6 +15,7 @@
 package types
 
 import (
+	"context"
 	"encoding/json"
 	"reflect"
 
@@ -37,15 +38,15 @@ var _ sql.CollationCoercible = JsonType{}
 type JsonType struct{}
 
 // Compare implements Type interface.
-func (t JsonType) Compare(a interface{}, b interface{}) (int, error) {
+func (t JsonType) Compare(ctx context.Context, a interface{}, b interface{}) (int, error) {
 	if hasNulls, res := CompareNulls(a, b); hasNulls {
 		return res, nil
 	}
-	return CompareJSON(a, b)
+	return CompareJSON(ctx, a, b)
 }
 
 // Convert implements Type interface.
-func (t JsonType) Convert(v interface{}) (doc interface{}, inRange sql.ConvertInRange, err error) {
+func (t JsonType) Convert(ctx context.Context, v interface{}) (doc interface{}, inRange sql.ConvertInRange, err error) {
 	switch v := v.(type) {
 	case sql.JSONWrapper:
 		return v, sql.InRange, nil
@@ -109,7 +110,7 @@ func (t JsonType) Convert(v interface{}) (doc interface{}, inRange sql.ConvertIn
 }
 
 // Equals implements the Type interface.
-func (t JsonType) Equals(otherType sql.Type) bool {
+func (t JsonType) Equals(ctx context.Context, otherType sql.Type) bool {
 	_, ok := otherType.(JsonType)
 	return ok
 }
@@ -136,20 +137,20 @@ func (t JsonType) SQL(ctx *sql.Context, dest []byte, v interface{}) (sqltypes.Va
 	// This is kind of a hack, and it means that reading JSON from tables no longer matches MySQL byte-for-byte.
 	// But its worth it to avoid the round-trip, which can be very slow.
 	if j, ok := v.(*LazyJSONDocument); ok {
-		str, err := MarshallJson(j)
+		str, err := MarshallJson(ctx, j)
 		if err != nil {
 			return sqltypes.NULL, err
 		}
 		val = AppendAndSliceBytes(dest, str)
 	} else {
 		// Convert to jsonType
-		jsVal, _, err := t.Convert(v)
+		jsVal, _, err := t.Convert(ctx, v)
 		if err != nil {
 			return sqltypes.NULL, err
 		}
 		js := jsVal.(sql.JSONWrapper)
 
-		str, err := StringifyJSON(js)
+		str, err := StringifyJSON(ctx, js)
 		if err != nil {
 			return sqltypes.NULL, err
 		}

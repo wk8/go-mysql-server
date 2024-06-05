@@ -53,7 +53,7 @@ func PreciseComparison(e sql.Expression) bool {
 			}
 
 			// comparisons with type conversions are sometimes imprecise
-			if !left.Equals(right) {
+			if !left.Equals(ctx, right) {
 				imprecise = true
 				return false
 			}
@@ -100,7 +100,7 @@ func (c *comparison) Compare(ctx *sql.Context, row sql.Row) (int, error) {
 	}
 
 	if types.TypesEqual(c.Left().Type(), c.Right().Type()) {
-		return c.Left().Type().Compare(left, right)
+		return c.Left().Type().Compare(ctx, left, right)
 	}
 
 	// ENUM, SET, and TIME must be excluded when doing comparisons, as they're too restrictive to use as a comparison
@@ -149,7 +149,7 @@ func (c *comparison) Compare(ctx *sql.Context, row sql.Row) (int, error) {
 		compareType = types.MustCreateString(stringCompareType.Type(), stringCompareType.Length(), collationPreference)
 	}
 
-	return compareType.Compare(left, right)
+	return compareType.Compare(ctx, left, right)
 }
 
 func (c *comparison) evalLeftAndRight(ctx *sql.Context, row sql.Row) (interface{}, interface{}, error) {
@@ -376,7 +376,7 @@ func (e *NullSafeEquals) Compare(ctx *sql.Context, row sql.Row) (int, error) {
 	}
 
 	if types.TypesEqual(e.Left().Type(), e.Right().Type()) {
-		return e.Left().Type().Compare(left, right)
+		return e.Left().Type().Compare(ctx, left, right)
 	}
 
 	var compareType sql.Type
@@ -385,7 +385,7 @@ func (e *NullSafeEquals) Compare(ctx *sql.Context, row sql.Row) (int, error) {
 		return 0, err
 	}
 
-	return compareType.Compare(left, right)
+	return compareType.Compare(ctx, left, right)
 }
 
 // Eval implements the Expression interface.
@@ -471,7 +471,7 @@ func (re *Regexp) compareRegexp(ctx *sql.Context, row sql.Row) (interface{}, err
 	if err != nil || left == nil {
 		return nil, err
 	}
-	left, _, err = types.LongText.Convert(left)
+	left, _, err = types.LongText.Convert(ctx, left)
 	if err != nil {
 		return nil, err
 	}
@@ -525,7 +525,7 @@ func (re *Regexp) evalRight(ctx *sql.Context, row sql.Row) (*string, error) {
 	if right == nil {
 		return nil, nil
 	}
-	right, _, err = types.LongText.Convert(right)
+	right, _, err = types.LongText.Convert(ctx, right)
 	if err != nil {
 		return nil, err
 	}

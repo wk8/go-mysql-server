@@ -63,7 +63,7 @@ func (f *MD5) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 		return nil, nil
 	}
 
-	val, _, err := types.LongText.Convert(arg)
+	val, _, err := types.LongText.Convert(ctx, arg)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +118,7 @@ func (f *SHA1) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 		return nil, nil
 	}
 
-	val, _, err := types.LongText.Convert(arg)
+	val, _, err := types.LongText.Convert(ctx, arg)
 	if err != nil {
 		return nil, err
 	}
@@ -180,11 +180,11 @@ func (f *SHA2) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 		return nil, nil
 	}
 
-	val, _, err := types.LongText.Convert(arg)
+	val, _, err := types.LongText.Convert(ctx, arg)
 	if err != nil {
 		return nil, err
 	}
-	count, _, err := types.Int64.Convert(countArg)
+	count, _, err := types.Int64.Convert(ctx, countArg)
 	if err != nil {
 		return nil, err
 	}

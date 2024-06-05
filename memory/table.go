@@ -1100,13 +1100,13 @@ func (t *Table) PeekNextAutoIncrementValue(ctx *sql.Context) (uint64, error) {
 func (t *Table) GetNextAutoIncrementValue(ctx *sql.Context, insertVal interface{}) (uint64, error) {
 	data := t.sessionTableData(ctx)
 
-	cmp, err := types.Uint64.Compare(insertVal, data.autoIncVal)
+	cmp, err := types.Uint64.Compare(ctx, insertVal, data.autoIncVal)
 	if err != nil {
 		return 0, err
 	}
 
 	if cmp > 0 && insertVal != nil {
-		v, _, err := types.Uint64.Convert(insertVal)
+		v, _, err := types.Uint64.Convert(ctx, insertVal)
 		if err != nil {
 			return 0, err
 		}
@@ -1187,14 +1187,14 @@ func addColumnToSchema(ctx *sql.Context, data *TableData, newCol *sql.Column, or
 						continue
 					}
 
-					cmp, err := newCol.Type.Compare(row[newColIdx], data.autoIncVal)
+					cmp, err := newCol.Type.Compare(ctx, row[newColIdx], data.autoIncVal)
 					if err != nil {
 						panic(err)
 					}
 
 					if cmp > 0 {
 						var val interface{}
-						val, _, err = types.Uint64.Convert(row[newColIdx])
+						val, _, err = types.Uint64.Convert(ctx, row[newColIdx])
 						if err != nil {
 							panic(err)
 						}
@@ -1362,7 +1362,7 @@ func (t *Table) ModifyColumn(ctx *sql.Context, columnName string, column *sql.Co
 			var oldRowWithoutVal sql.Row
 			oldRowWithoutVal = append(oldRowWithoutVal, row[:oldIdx]...)
 			oldRowWithoutVal = append(oldRowWithoutVal, row[oldIdx+1:]...)
-			newVal, inRange, err := column.Type.Convert(row[oldIdx])
+			newVal, inRange, err := column.Type.Convert(ctx, row[oldIdx])
 			if err != nil {
 				if sql.ErrNotMatchingSRID.Is(err) {
 					err = sql.ErrNotMatchingSRIDWithColName.New(columnName, err)
@@ -2137,7 +2137,7 @@ func (ps partitionssort) Less(i, j int) bool {
 
 func (ps partitionssort) pkLess(l, r sql.Row) bool {
 	for _, f := range ps.pk {
-		r, err := f.c.Type.Compare(l[f.i], r[f.i])
+		r, err := f.c.Type.Compare(ctx, l[f.i], r[f.i])
 		if err != nil {
 			panic(err)
 		}

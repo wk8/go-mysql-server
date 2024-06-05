@@ -21,14 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dolthub/vitess/go/sqltypes"
-	querypb "github.com/dolthub/vitess/go/vt/proto/query"
-	"github.com/dolthub/vitess/go/vt/sqlparser"
-	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"gopkg.in/src-d/go-errors.v1"
-
 	sqle "github.com/dolthub/go-mysql-server"
 	"github.com/dolthub/go-mysql-server/enginetest/queries"
 	"github.com/dolthub/go-mysql-server/enginetest/scriptgen/setup"
@@ -38,6 +30,12 @@ import (
 	"github.com/dolthub/go-mysql-server/sql/planbuilder"
 	"github.com/dolthub/go-mysql-server/sql/transform"
 	"github.com/dolthub/go-mysql-server/sql/types"
+	"github.com/dolthub/vitess/go/sqltypes"
+	querypb "github.com/dolthub/vitess/go/vt/proto/query"
+	"github.com/dolthub/vitess/go/vt/sqlparser"
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // RunQueryWithContext runs the query given and asserts that it doesn't result in an error.
@@ -517,7 +515,7 @@ func injectBindVarsAndPrepare(
 			expr := b.ConvertVal(n)
 			var val interface{}
 			if l, ok := expr.(*expression.Literal); ok {
-				val, _, err = expr.Type().Promote().Convert(l.Value())
+				val, _, err = expr.Type().Promote().Convert(ctx, l.Value())
 				if err != nil {
 					skipTypeConv = true
 					return false, nil
@@ -620,7 +618,7 @@ func toSQL(c *sql.Column, expected any, isZeroTime bool) (any, error) {
 		c.Type.Type() == sqltypes.Year || (isTime && isZeroTime) || (isStr && types.IsTextOnly(c.Type)) {
 		return expected, nil
 	} else {
-		val, _, err := c.Type.Convert(expected)
+		val, _, err := c.Type.Convert(ctx, expected)
 		return val, err
 	}
 }
@@ -820,7 +818,7 @@ func widenJSONValues(val interface{}) sql.JSONWrapper {
 		js = types.MustJSON(str)
 	}
 
-	doc, err := js.ToInterface()
+	doc, err := js.ToInterface(ctx)
 	if err != nil {
 		panic(err)
 	}

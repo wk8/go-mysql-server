@@ -18,12 +18,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dolthub/jsonpath"
-	"gopkg.in/src-d/go-errors.v1"
-
 	"github.com/dolthub/go-mysql-server/sql"
 	"github.com/dolthub/go-mysql-server/sql/expression"
 	"github.com/dolthub/go-mysql-server/sql/types"
+	"github.com/dolthub/jsonpath"
 )
 
 // JSONSearch (json_doc, one_or_all, search_str[, escape_char[, path] ...])
@@ -219,7 +217,7 @@ func (j *JSONSearch) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 	if oneOrAll == nil {
 		return nil, nil
 	}
-	oneOrAll, _, err = types.Text.Convert(oneOrAll)
+	oneOrAll, _, err = types.Text.Convert(ctx, oneOrAll)
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +239,7 @@ func (j *JSONSearch) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 	if search == nil {
 		return nil, nil
 	}
-	search, _, err = types.Text.Convert(search)
+	search, _, err = types.Text.Convert(ctx, search)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +252,7 @@ func (j *JSONSearch) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 			return nil, err
 		}
 		if escapeVal != nil {
-			escapeVal, _, err = types.Text.Convert(escapeVal)
+			escapeVal, _, err = types.Text.Convert(ctx, escapeVal)
 			if err != nil {
 				return nil, err
 			}
@@ -295,7 +293,7 @@ func (j *JSONSearch) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 		}
 	}
 
-	val, err := doc.ToInterface()
+	val, err := doc.ToInterface(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +332,7 @@ func (j *JSONSearch) Eval(ctx *sql.Context, row sql.Row) (interface{}, error) {
 	} else {
 		finalResults = results
 	}
-	finalResults, _, err = types.JSON.Convert(finalResults)
+	finalResults, _, err = types.JSON.Convert(ctx, finalResults)
 	if err != nil {
 		return nil, err
 	}

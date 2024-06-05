@@ -15,6 +15,7 @@
 package types
 
 import (
+	"context"
 	"reflect"
 
 	"github.com/dolthub/vitess/go/sqltypes"
@@ -34,18 +35,18 @@ func NewDeferredType(name string) sql.Type {
 	return &deferredType{bindVar: name}
 }
 
-func (t deferredType) Equals(otherType sql.Type) bool {
+func (t deferredType) Equals(ctx context.Context, otherType sql.Type) bool {
 	return false
 }
 
 // Compare implements Type interface. Note that while this returns 0 (equals)
 // for ordering purposes, in SQL NULL != NULL.
-func (t deferredType) Compare(a interface{}, b interface{}) (int, error) {
+func (t deferredType) Compare(context context.Context, a interface{}, b interface{}) (int, error) {
 	return 0, nil
 }
 
 // Convert implements Type interface.
-func (t deferredType) Convert(v interface{}) (interface{}, sql.ConvertInRange, error) {
+func (t deferredType) Convert(ctx context.Context, v interface{}) (interface{}, sql.ConvertInRange, error) {
 	if v != nil {
 		return nil, sql.InRange, ErrValueNotNil.New(v)
 	}
@@ -57,15 +58,6 @@ func (t deferredType) Convert(v interface{}) (interface{}, sql.ConvertInRange, e
 func (t deferredType) MaxTextResponseByteLength(*sql.Context) uint32 {
 	// deferredType is never actually sent over the wire
 	return 0
-}
-
-// MustConvert implements the Type interface.
-func (t deferredType) MustConvert(v interface{}) interface{} {
-	value, _, err := t.Convert(v)
-	if err != nil {
-		panic(err)
-	}
-	return value
 }
 
 // Promote implements the Type interface.

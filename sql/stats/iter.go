@@ -124,7 +124,7 @@ func (s *statsIter) bucketToRow(i int, bucket sql.HistogramBucket) (sql.Row, err
 func ParseRow(rowStr string, types []sql.Type) (sql.Row, error) {
 	var row sql.Row
 	for i, v := range strings.Split(rowStr, ",") {
-		val, _, err := types[i].Convert(v)
+		val, _, err := types[i].Convert(ctx, v)
 		if err != nil {
 			return nil, err
 		}

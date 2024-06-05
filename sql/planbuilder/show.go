@@ -578,7 +578,7 @@ func (b *Builder) buildAsOfExpr(inScope *scope, time ast.Expr) sql.Expression {
 			// *ast.NullVal
 			return nil
 		}
-		ret, _, err := types.Text.Convert(val.Val)
+		ret, _, err := types.Text.Convert(ctx, val.Val)
 		if err != nil {
 			b.handleErr(err)
 		}

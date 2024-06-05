@@ -35,7 +35,7 @@ func TestNullCompare(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("%v %v", test.val1, test.val2), func(t *testing.T) {
-			cmp, err := Null.Compare(test.val1, test.val2)
+			cmp, err := Null.Compare(ctx, test.val1, test.val2)
 			require.NoError(t, err)
 			assert.Equal(t, 0, cmp)
 		})
@@ -68,7 +68,7 @@ func TestNullConvert(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("%v %v", test.val, test.expectedVal), func(t *testing.T) {
-			val, _, err := Null.Convert(test.val)
+			val, _, err := Null.Convert(ctx, test.val)
 			if test.expectedErr {
 				assert.Error(t, err)
 			} else {

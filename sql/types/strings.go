@@ -15,6 +15,7 @@
 package types
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -241,7 +242,7 @@ func (t StringType) Length() int64 {
 }
 
 // Compare implements Type interface.
-func (t StringType) Compare(a interface{}, b interface{}) (int, error) {
+func (t StringType) Compare(ctx context.Context, a interface{}, b interface{}) (int, error) {
 	if hasNulls, res := CompareNulls(a, b); hasNulls {
 		return res, nil
 	}
@@ -250,7 +251,7 @@ func (t StringType) Compare(a interface{}, b interface{}) (int, error) {
 	var bs string
 	var ok bool
 	if as, ok = a.(string); !ok {
-		ai, _, err := t.Convert(a)
+		ai, _, err := t.Convert(ctx, a)
 		if err != nil {
 			return 0, err
 		}
@@ -261,7 +262,7 @@ func (t StringType) Compare(a interface{}, b interface{}) (int, error) {
 		}
 	}
 	if bs, ok = b.(string); !ok {
-		bi, _, err := t.Convert(b)
+		bi, _, err := t.Convert(ctx, b)
 		if err != nil {
 			return 0, err
 		}
@@ -303,12 +304,12 @@ func (t StringType) Compare(a interface{}, b interface{}) (int, error) {
 }
 
 // Convert implements Type interface.
-func (t StringType) Convert(v interface{}) (interface{}, sql.ConvertInRange, error) {
+func (t StringType) Convert(ctx context.Context, v interface{}) (interface{}, sql.ConvertInRange, error) {
 	if v == nil {
 		return nil, sql.InRange, nil
 	}
 
-	val, err := ConvertToString(v, t)
+	val, err := ConvertToString(ctx, v, t)
 	if err != nil {
 		return nil, sql.OutOfRange, err
 	}
@@ -319,7 +320,7 @@ func (t StringType) Convert(v interface{}) (interface{}, sql.ConvertInRange, err
 	return val, sql.InRange, nil
 }
 
-func ConvertToString(v interface{}, t sql.StringType) (string, error) {
+func ConvertToString(ctx context.Context, v interface{}, t sql.StringType) (string, error) {
 	var val string
 	switch s := v.(type) {
 	case bool:
@@ -372,7 +373,7 @@ func ConvertToString(v interface{}, t sql.StringType) (string, error) {
 		}
 		val = s.Decimal.String()
 	case JSONDocument:
-		jsonString, err := StringifyJSON(s)
+		jsonString, err := StringifyJSON(ctx, s)
 		if err != nil {
 			return "", err
 		}
@@ -381,7 +382,7 @@ func ConvertToString(v interface{}, t sql.StringType) (string, error) {
 			return "", err
 		}
 	case sql.JSONWrapper:
-		jsonBytes, err := MarshallJson(s)
+		jsonBytes, err := MarshallJson(ctx, s)
 		if err != nil {
 			return "", err
 		}
@@ -429,7 +430,7 @@ func ConvertToString(v interface{}, t sql.StringType) (string, error) {
 // conversions are made. If the value is a byte slice then a non-copying conversion is made, which means that the
 // original byte slice MUST NOT be modified after being passed to this function. If modifications need to be made, then
 // you must allocate a new byte slice and pass that new one in.
-func ConvertToCollatedString(val interface{}, typ sql.Type) (string, sql.CollationID, error) {
+func ConvertToCollatedString(ctx context.Context, val interface{}, typ sql.Type) (string, sql.CollationID, error) {
 	var content string
 	var collation sql.CollationID
 	var err error
@@ -440,7 +441,7 @@ func ConvertToCollatedString(val interface{}, typ sql.Type) (string, sql.Collati
 		} else if byteVal, ok := val.([]byte); ok {
 			content = encodings.BytesToString(byteVal)
 		} else {
-			val, _, err = LongText.Convert(val)
+			val, _, err = LongText.Convert(ctx, val)
 			if err != nil {
 				return "", sql.Collation_Unspecified, err
 			}
@@ -448,7 +449,7 @@ func ConvertToCollatedString(val interface{}, typ sql.Type) (string, sql.Collati
 		}
 	} else {
 		collation = sql.Collation_Default
-		val, _, err = LongText.Convert(val)
+		val, _, err = LongText.Convert(ctx, val)
 		if err != nil {
 			return "", sql.Collation_Unspecified, err
 		}
@@ -457,17 +458,8 @@ func ConvertToCollatedString(val interface{}, typ sql.Type) (string, sql.Collati
 	return content, collation, nil
 }
 
-// MustConvert implements the Type interface.
-func (t StringType) MustConvert(v interface{}) interface{} {
-	value, _, err := t.Convert(v)
-	if err != nil {
-		panic(err)
-	}
-	return value
-}
-
 // Equals implements the Type interface.
-func (t StringType) Equals(otherType sql.Type) bool {
+func (t StringType) Equals(ctx context.Context, otherType sql.Type) bool {
 	if ot, ok := otherType.(StringType); ok {
 		return t.baseType == ot.baseType && t.collation == ot.collation && t.maxCharLength == ot.maxCharLength
 	}
@@ -494,13 +486,13 @@ func (t StringType) SQL(ctx *sql.Context, dest []byte, v interface{}) (sqltypes.
 
 	var val []byte
 	if IsBinaryType(t) {
-		v, _, err := t.Convert(v)
+		v, _, err := t.Convert(ctx, v)
 		if err != nil {
 			return sqltypes.Value{}, err
 		}
 		val = AppendAndSliceBytes(dest, v.([]byte))
 	} else {
-		v, err := ConvertToString(v, t)
+		v, err := ConvertToString(ctx, v, t)
 		if err != nil {
 			return sqltypes.Value{}, err
 		}

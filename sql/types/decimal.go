@@ -15,6 +15,7 @@
 package types
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -120,7 +121,7 @@ func (t DecimalType_) Type() query.Type {
 }
 
 // Compare implements Type interface.
-func (t DecimalType_) Compare(a interface{}, b interface{}) (int, error) {
+func (t DecimalType_) Compare(context context.Context, a interface{}, b interface{}) (int, error) {
 	if hasNulls, res := CompareNulls(a, b); hasNulls {
 		return res, nil
 	}
@@ -138,7 +139,7 @@ func (t DecimalType_) Compare(a interface{}, b interface{}) (int, error) {
 }
 
 // Convert implements Type interface.
-func (t DecimalType_) Convert(v interface{}) (interface{}, sql.ConvertInRange, error) {
+func (t DecimalType_) Convert(ctx context.Context, v interface{}) (interface{}, sql.ConvertInRange, error) {
 	dec, err := t.ConvertToNullDecimal(v)
 	if err != nil {
 		return nil, sql.OutOfRange, err
@@ -265,17 +266,8 @@ func (t DecimalType_) BoundsCheck(v decimal.Decimal) (decimal.Decimal, sql.Conve
 	return v, sql.InRange, nil
 }
 
-// MustConvert implements the Type interface.
-func (t DecimalType_) MustConvert(v interface{}) interface{} {
-	value, _, err := t.Convert(v)
-	if err != nil {
-		panic(err)
-	}
-	return value
-}
-
 // Equals implements the Type interface.
-func (t DecimalType_) Equals(otherType sql.Type) bool {
+func (t DecimalType_) Equals(ctx context.Context, otherType sql.Type) bool {
 	if ot, ok := otherType.(DecimalType_); ok {
 		return t.precision == ot.precision && t.scale == ot.scale
 	}

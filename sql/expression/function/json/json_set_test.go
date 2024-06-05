@@ -119,7 +119,7 @@ func TestJSONSet(t *testing.T) {
 
 				var expect interface{}
 				if tt.expected != nil {
-					expect, _, err = types.JSON.Convert(tt.expected)
+					expect, _, err = types.JSON.Convert(ctx, tt.expected)
 					if err != nil {
 						panic("Bad test string. Can't convert string to JSONDocument: " + tt.expected.(string))
 					}

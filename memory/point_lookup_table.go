@@ -86,7 +86,7 @@ func (i pointLookupIndex) CanSupport(ranges ...sql.Range) bool {
 		if !ok {
 			return false
 		}
-		belowKey, _, err := types.Int64.Convert(below.Key)
+		belowKey, _, err := types.Int64.Convert(ctx, below.Key)
 		if err != nil {
 			return false
 		}
@@ -95,7 +95,7 @@ func (i pointLookupIndex) CanSupport(ranges ...sql.Range) bool {
 		if !ok {
 			return false
 		}
-		aboveKey, _, err := types.Int64.Convert(above.Key)
+		aboveKey, _, err := types.Int64.Convert(ctx, above.Key)
 		if err != nil {
 			return false
 		}

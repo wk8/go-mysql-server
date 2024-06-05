@@ -1290,7 +1290,7 @@ func makeIndexScan(ctx *sql.Context, statsProv sql.StatsProvider, tab plan.Table
 	}
 
 	for i, typ := range idx.SqlIdx().ColumnExpressionTypes() {
-		if !types.Null.Equals(rang[i].Typ) && !typ.Type.Equals(rang[i].Typ) {
+		if !types.Null.Equals(ctx, rang[i].Typ) && !typ.Type.Equals(ctx, rang[i].Typ) {
 			return nil, false, nil
 		}
 	}

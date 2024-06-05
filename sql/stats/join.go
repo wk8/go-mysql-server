@@ -37,17 +37,17 @@ func Join(s1, s2 sql.Statistic, prefixCnt int, debug bool) (sql.Statistic, error
 	cmp := func(row1, row2 sql.Row) (int, error) {
 		var keyCmp int
 		for i := 0; i < prefixCnt; i++ {
-			k1, _, err := s1.Types()[i].Promote().Convert(row1[i])
+			k1, _, err := s1.Types()[i].Promote().Convert(ctx, row1[i])
 			if err != nil {
 				return 0, fmt.Errorf("incompatible types")
 			}
 
-			k2, _, err := s2.Types()[i].Promote().Convert(row2[i])
+			k2, _, err := s2.Types()[i].Promote().Convert(ctx, row2[i])
 			if err != nil {
 				return 0, fmt.Errorf("incompatible types")
 			}
 
-			cmp, err := s1.Types()[i].Promote().Compare(k1, k2)
+			cmp, err := s1.Types()[i].Promote().Compare(ctx, k1, k2)
 			if err != nil {
 				return 0, err
 			}
@@ -515,7 +515,7 @@ func mergeMcvs(mcvs1, mcvs2 []sql.Row, mcvCnts1, mcvCnts2 []uint64, cmp func(sql
 func mergeOverlappingBuckets(h []sql.HistogramBucket, types []sql.Type) ([]sql.HistogramBucket, error) {
 	cmp := func(l, r sql.Row) (int, error) {
 		for i := 0; i < len(types); i++ {
-			cmp, err := types[i].Compare(l[i], r[i])
+			cmp, err := types[i].Compare(ctx, l[i], r[i])
 			if err != nil {
 				return 0, err
 			}
@@ -586,11 +586,11 @@ const (
 func euclideanDistance(row1, row2 sql.Row, prefixLen int) (float64, error) {
 	var distSq float64
 	for i := 0; i < prefixLen; i++ {
-		v1, _, err := types.Float64.Convert(row1[i])
+		v1, _, err := types.Float64.Convert(ctx, row1[i])
 		if err != nil {
 			return 0, err
 		}
-		v2, _, err := types.Float64.Convert(row2[i])
+		v2, _, err := types.Float64.Convert(ctx, row2[i])
 		if err != nil {
 			return 0, err
 		}
