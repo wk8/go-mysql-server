@@ -16,6 +16,8 @@ package rowexec
 
 import (
 	"io"
+	"sync/atomic"
+	"time"
 
 	"gopkg.in/src-d/go-errors.v1"
 
@@ -74,7 +76,16 @@ type transactionCommittingIter struct {
 	transactionDatabase string
 }
 
+var TCINextDuration int64
+var TCINextCount uint64
+
 func (t transactionCommittingIter) Next(ctx *sql.Context) (sql.Row, error) {
+	start := time.Now()
+	defer func() {
+		atomic.AddInt64(&TCINextDuration, int64(time.Since(start)))
+		atomic.AddUint64(&TCINextCount, 1)
+	}()
+
 	return t.childIter.Next(ctx)
 }
 
